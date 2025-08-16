@@ -1,0 +1,28 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t',
+    '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/worker-fn:${_TAG}',
+    '.'
+  ]
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/worker-fn:${_TAG}']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'functions'
+  - 'deploy'
+  - 'worker-fn'
+  - '--gen2'
+  - '--region'
+  - '${_LOCATION}'
+  - '--image'
+  - '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/worker-fn:${_TAG}'
+  - '--trigger-http'
+  - '--no-allow-unauthenticated'
+  - '--set-env-vars'
+  - 'PROJECT_ID=${_PROJECT_ID},LOCATION=${_LOCATION},REDIS_HOST=${_REDIS_HOST},REDIS_PORT=${_REDIS_PORT}'
+images:
+- '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/worker-fn:${_TAG}'
+options:
+  logging: CLOUD_LOGGING_ONLY
