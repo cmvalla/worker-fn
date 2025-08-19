@@ -1,0 +1,15 @@
+# Terraform state file
+terraform.tfstate
+terraform.tfstate.backup
+
+# Terraform lock file
+.terraform.lock.hcl
+
+# Terraform providers directory
+.terraform/
+
+# Crash log files
+crash.log
+
+# License files
+LICENSE
