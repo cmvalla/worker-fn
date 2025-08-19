@@ -1,9 +1,5 @@
-ARG BASE_IMAGE_LOCATION
-ARG PROJECT_ID
-ARG REPOSITORY_ID
-
 # Use the base
-FROM ${BASE_IMAGE_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY_ID}/base-image:latest
+FROM europe-west1-docker.pkg.dev/spanner-demo-bengal/my-docker-repo/base-image:latest
 
 # Set the working directory.
 WORKDIR /app
@@ -17,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8080
 
 # Set the entrypoint for the function.
-CMD ["functions-framework", "--target=orchestrator", "--source=main.py"]
+CMD ["functions-framework", "--target=worker", "--source=main.py"]
