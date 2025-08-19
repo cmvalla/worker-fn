@@ -28,15 +28,9 @@ variable "image_tag" {
   description = "The tag of the Docker image, typically the Build ID."
 }
 
-variable "worker_sa_roles" {
-  type = list(string)
-  description = "Project-level IAM roles for the worker service account"
-  default = [
-    "roles/run.invoker",
-    "roles/serviceusage.serviceUsageConsumer",
-    "roles/cloudtrace.agent",
-    "roles/spanner.databaseUser"
-  ]
+variable "worker_sa_email" {
+  type        = string
+  description = "The email of the service account for the worker function."
 }
 
 variable "redis_host" {

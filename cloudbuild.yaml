@@ -38,7 +38,8 @@ steps:
       -var="redis_host=${_REDIS_HOST}" \
       -var="redis_port=${_REDIS_PORT}" \
       -var="spanner_instance=${_SPANNER_INSTANCE}" \
-      -var="spanner_database=${_SPANNER_DATABASE}"
+      -var="spanner_database=${_SPANNER_DATABASE}" \
+      -var="worker_sa_email=${_WORKER_SA_EMAIL}"
   waitFor: ['push']
 
 # Clean up old images
