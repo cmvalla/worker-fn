@@ -18,9 +18,13 @@ resource "google_cloud_run_v2_service" "worker" {
         container_port = 8080
       }
       env {
-        name  = "GOOGLE_CLOUD_PROJECT"
-        value = var.project_id
-      }
+          name  = "GOOGLE_CLOUD_PROJECT"
+          value = var.project_id
+        }
+        env {
+          name = "GCP_LOCATION"
+          value = var.location
+        }
       env {
         name  = "REDIS_HOST"
         value = var.redis_host
