@@ -27,7 +27,7 @@ steps:
   - '-c'
   - |
     cd terraform
-    terraform init -backend-config="prefix=cloud-spanner-demo/worker/${_PROJECT_SUFFIX}"
+    terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
     terraform apply -auto-approve \
       -var="project_id=${_PROJECT_ID}" \
       -var="region=${_REGION}" \
