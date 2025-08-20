@@ -7,11 +7,7 @@ resource "google_cloud_run_v2_service" "worker" {
 
   template {
     service_account = var.worker_sa_email
-    timeout         = "900s" # 15 minutes
-    scaling {
-      min_instance_count = 1
-      max_instance_count = 10 # Increased for parallel processing
-    }
+    execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     containers {
       image = "${var.location}-docker.pkg.dev/${var.project_id}/${var.repository_id}/${var.image_name}:${var.image_tag}"
       ports {
