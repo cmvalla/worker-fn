@@ -3,7 +3,7 @@ resource "google_cloud_run_v2_service" "worker" {
   name     = "worker-fn"
   location = var.location
   deletion_protection = false
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   template {
     service_account = var.worker_sa_email
