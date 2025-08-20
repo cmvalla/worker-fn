@@ -5,7 +5,7 @@ import google.cloud.logging
 import logging
 import requests
 import vertexai
-from vertexai.language_models import TextGenerationModel
+from vertexai.generative_models import GenerativeModel
 
 # --- Boilerplate and Configuration ---
 
@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.DEBUG) # Set root logger to DEBUG
 
 # --- Environment Variables ---
 GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
+LOCATION = os.environ.get("GCP_LOCATION", "europe-west1")
 logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")
 
 # --- Global Clients ---
@@ -24,7 +24,7 @@ generation_model = None
 try:
     logging.info("Initializing Vertex AI client...")
     vertexai.init(project=GCP_PROJECT, location=LOCATION)
-    generation_model = TextGenerationModel.from_pretrained("text-bison")
+    generation_model = GenerativeModel("gemini-2.5-flash-lite")
     logging.info("Vertex AI client initialized successfully.")
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Vertex AI client: {e}", exc_info=True)
@@ -77,17 +77,17 @@ def worker(request):
 
         # 2. Call Vertex AI to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
-        logging.debug(f"Generated prompt for Vertex AI:\n---\n{prompt}\n---")
+        logging.debug(f"Generated prompt for Vertex AI:n---n{prompt}n---")
         
         logging.info("Calling Vertex AI model...")
-        response = generation_model.predict(prompt, max_output_tokens=2048) # Increased token limit
+        response = generation_model.generate_content(prompt)
         logging.info("Received response from Vertex AI.")
         
         extracted_text = response.text.strip().replace("```json", "").replace("```", "").strip()
         logging.debug(f"Raw response text from Vertex AI: {extracted_text}")
         
         extracted_json = json.loads(extracted_text)
-        logging.info("Successfully parsed JSON from model output.")
+        logging.info(f"Successfully parsed JSON from model output.")
         logging.debug(f"Extracted JSON: {json.dumps(extracted_json, indent=2)}")
 
 
