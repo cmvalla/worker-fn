@@ -4,8 +4,7 @@ import functions_framework
 import google.cloud.logging
 import logging
 import requests
-import vertexai
-from vertexai.generative_models import GenerativeModel
+import google.generativeai as genai
 import google.auth
 import google.auth.transport.requests
 
@@ -24,12 +23,12 @@ logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOC
 # --- Global Clients ---
 generation_model = None
 try:
-    logging.info("Initializing Vertex AI client...")
-    vertexai.init(project=GCP_PROJECT, location=LOCATION)
-        generation_model = GenerativeModel("gemini-2.5-flash-lite")
-    logging.info("Vertex AI client initialized successfully.")
+    logging.info("Initializing Generative AI client...")
+    genai.configure(transport="rest") # Use REST transport for simplicity in this environment
+    generation_model = genai.GenerativeModel("gemini-2.5-flash-lite")
+    logging.info("Generative AI client initialized successfully.")
 except Exception as e:
-    logging.critical(f"FATAL: Failed to initialize Vertex AI client: {e}", exc_info=True)
+    logging.critical(f"FATAL: Failed to initialize Generative AI client: {e}", exc_info=True)
 
 # --- Prompt Template for Knowledge Extraction ---
 EXTRACTION_PROMPT = """
@@ -58,11 +57,11 @@ def get_google_id_token(audience):
 @functions_framework.http
 def worker(request):
     """This function receives a chunk of text, extracts entities and relationships
-    using a Vertex AI model, and sends the result to a callback URL.
+    using a Generative AI model, and sends the result to a callback URL.
     """
     logging.debug("Worker function started.")
     if not generation_model:
-        logging.critical("Vertex AI client not initialized. Aborting function.")
+        logging.critical("Generative AI client not initialized. Aborting function.")
         return "ERROR: Client initialization failed", 500
 
     extracted_text = ""
@@ -86,14 +85,14 @@ def worker(request):
 
         logging.info(f"Worker received chunk to process. Callback URL: {callback_url}")
 
-        # 2. Call Vertex AI to extract knowledge
+        # 2. Call the model to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
-        logging.info("Calling Vertex AI model...")
+        logging.info("Calling Generative AI model...")
         response = generation_model.generate_content(prompt)
-        logging.info("Received response from Vertex AI.")
+        logging.info("Received response from Generative AI.")
         
         extracted_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        logging.debug(f"Raw response text from Vertex AI: {extracted_text}")
+        logging.debug(f"Raw response text from model: {extracted_text}")
         
         extracted_json = json.loads(extracted_text)
         logging.info(f"Successfully parsed JSON from model output.")
