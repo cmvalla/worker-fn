@@ -6,6 +6,8 @@ import logging
 import requests
 import vertexai
 from vertexai.generative_models import GenerativeModel
+import google.auth
+import google.auth.transport.requests
 
 # --- Boilerplate and Configuration ---
 
@@ -24,11 +26,10 @@ generation_model = None
 try:
     logging.info("Initializing Vertex AI client...")
     vertexai.init(project=GCP_PROJECT, location=LOCATION)
-    generation_model = GenerativeModel("gemini-2.5-flash-lite")
+    generation_model = GenerativeModel("gemini-1.0-pro")
     logging.info("Vertex AI client initialized successfully.")
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Vertex AI client: {e}", exc_info=True)
-    # The function will fail later if generation_model is None, but we log the critical error here.
 
 # --- Prompt Template for Knowledge Extraction ---
 EXTRACTION_PROMPT = """
@@ -44,6 +45,16 @@ TEXT:
 JSON:
 """
 
+def get_google_id_token(audience):
+    """Fetches a Google-signed ID token for the specified audience."""
+    logging.debug(f"Fetching ID token for audience: {audience}")
+    creds, project = google.auth.default()
+    auth_req = google.auth.transport.requests.Request()
+    creds.refresh(auth_req)
+    id_token = creds.id_token
+    logging.debug("Successfully fetched ID token.")
+    return id_token
+
 @functions_framework.http
 def worker(request):
     """This function receives a chunk of text, extracts entities and relationships
@@ -54,7 +65,7 @@ def worker(request):
         logging.critical("Vertex AI client not initialized. Aborting function.")
         return "ERROR: Client initialization failed", 500
 
-    extracted_text = "" # Initialize to ensure it's available in the except block
+    extracted_text = ""
     try:
         # 1. Parse the incoming request from Cloud Tasks
         logging.debug("Parsing incoming request...")
@@ -70,15 +81,13 @@ def worker(request):
         callback_url = request_json.get("callback_url")
 
         if not text_chunk or not callback_url:
-            logging.error(f"Missing 'chunk' or 'callback_url' in the request. Found chunk: {'yes' if text_chunk else 'no'}, Found callback: {'yes' if callback_url else 'no'}")
+            logging.error(f"Missing 'chunk' or 'callback_url' in the request.")
             return "Bad Request: Missing chunk or callback_url", 400
 
         logging.info(f"Worker received chunk to process. Callback URL: {callback_url}")
 
         # 2. Call Vertex AI to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
-        logging.debug(f"Generated prompt for Vertex AI:n---n{prompt}n---")
-        
         logging.info("Calling Vertex AI model...")
         response = generation_model.generate_content(prompt)
         logging.info("Received response from Vertex AI.")
@@ -88,23 +97,23 @@ def worker(request):
         
         extracted_json = json.loads(extracted_text)
         logging.info(f"Successfully parsed JSON from model output.")
-        logging.debug(f"Extracted JSON: {json.dumps(extracted_json, indent=2)}")
 
-
-        # 3. Send the result to the callback URL
-        headers = {'Content-Type': 'application/json'}
+        # 3. Send the result to the callback URL with authentication
         logging.info(f"Sending results to callback URL: {callback_url}")
         try:
+            # Fetch an ID token for the callback URL
+            id_token = get_google_id_token(audience=callback_url)
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {id_token}'
+            }
+            
             callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers, timeout=60)
             logging.info(f"Callback response status code: {callback_response.status_code}")
-            logging.debug(f"Callback response headers: {callback_response.headers}")
-            logging.debug(f"Callback response body: {callback_response.text}")
             callback_response.raise_for_status()
             logging.info(f"Successfully sent results to callback URL.")
-        except requests.exceptions.Timeout:
-            logging.error(f"Request to callback URL timed out: {callback_url}", exc_info=True)
-            return "Callback timeout", 504
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logging.error(f"Failed to send result to callback URL: {e}", exc_info=True)
             return "Error calling callback URL", 500
 
