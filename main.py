@@ -48,6 +48,7 @@ def worker(request):
         logging.critical("Vertex AI client not initialized. Aborting function.")
         return "ERROR: Client initialization failed", 500
 
+    extracted_text = "" # Initialize to ensure it's available in the except block
     try:
         # 1. Parse the incoming request from Cloud Tasks
         request_json = request.get_json(silent=True)
@@ -67,25 +68,30 @@ def worker(request):
         
         # The model output might contain markdown fences (```json ... ```) - remove them
         extracted_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        logging.info(f"Raw response from Vertex AI: {extracted_text}")
         extracted_json = json.loads(extracted_text)
 
         logging.info(f"Successfully extracted {len(extracted_json.get('entities',[]))} entities and {len(extracted_json.get('relationships',[]))} relationships.")
 
         # 3. Send the result to the callback URL
         headers = {'Content-Type': 'application/json'}
-        callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers)
-        callback_response.raise_for_status() # Raise an exception for bad status codes
+        try:
+            callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers, timeout=60)
+            callback_response.raise_for_status() # Raise an exception for bad status codes
+            logging.info(f"Successfully sent results to callback URL. Status: {callback_response.status_code}")
+        except requests.exceptions.Timeout:
+            logging.error(f"Request to callback URL timed out: {callback_url}")
+            return "Callback timeout", 504
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to send result to callback URL: {e}")
+            return "Error calling callback URL", 500
 
-        logging.info(f"Successfully sent results to callback URL. Status: {callback_response.status_code}")
 
         return "OK", 200
 
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON from model output: {e}. Raw text: {extracted_text}")
         return "Error processing model output", 500
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to send result to callback URL: {e}")
-        return "Error calling callback URL", 500
     except Exception as e:
         logging.error(f"An error occurred in the worker function: {e}", exc_info=True)
         return "Internal Server Error", 500
