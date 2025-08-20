@@ -1,3 +1,8 @@
+data "google_service_account" "worker_sa" {
+  account_id = "worker-sa"
+  project    = var.project_id
+}
+
 resource "google_cloud_run_v2_service" "worker" {
   project  = var.project_id
   name     = "worker-fn"
@@ -6,7 +11,7 @@ resource "google_cloud_run_v2_service" "worker" {
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   template {
-    service_account = var.worker_sa_email
+    service_account = data.google_service_account.worker_sa.email
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     containers {
       image = "${var.location}-docker.pkg.dev/${var.project_id}/${var.repository_id}/${var.image_name}:${var.image_tag}"
