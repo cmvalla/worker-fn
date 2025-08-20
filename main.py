@@ -26,7 +26,7 @@ generation_model = None
 try:
     logging.info("Initializing Vertex AI client...")
     vertexai.init(project=GCP_PROJECT, location=LOCATION)
-        generation_model = GenerativeModel("gemini-1.0-pro-vision")
+        generation_model = GenerativeModel("gemini-2.5-flash-lite")
     logging.info("Vertex AI client initialized successfully.")
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Vertex AI client: {e}", exc_info=True)
