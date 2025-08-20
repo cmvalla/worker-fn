@@ -59,6 +59,12 @@ def worker(request):
     """This function receives a chunk of text, extracts entities and relationships
     using a Generative AI model, and sends the result to a callback URL.
     """
+    try:
+        creds, project_id = google.auth.default()
+        logging.info(f"Worker function is running with service account: {creds.service_account_email}")
+    except Exception as e:
+        logging.error(f"Could not retrieve service account credentials: {e}")
+
     logging.debug("Worker function started.")
     if not generation_model:
         logging.critical("Generative AI client not initialized. Aborting function.")
