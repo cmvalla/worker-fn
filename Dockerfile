@@ -1,5 +1,8 @@
+ARG BASE_IMAGE_LOCATION
+ARG PROJECT_ID
+ARG REPOSITORY_ID
 # Use the base
-FROM europe-west1-docker.pkg.dev/spanner-demo-bengal/my-docker-repo/base-image:latest
+FROM ${BASE_IMAGE_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY_ID}/base-image:latest
 
 # Set the working directory.
 WORKDIR /app
