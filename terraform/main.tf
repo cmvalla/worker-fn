@@ -33,12 +33,12 @@ resource "google_cloud_run_v2_service" "worker" {
 
       volume_mounts {
         name       = "secret-volume"
-        mount_path = "/app"
+        mount_path = "/app/creds"
       }
 
       env {
         name  = "GOOGLE_APPLICATION_CREDENTIALS"
-        value = "/app/credentials.json"
+        value = "/app/creds/credentials.json"
       }
       env {
         name  = "GOOGLE_CLOUD_PROJECT"
