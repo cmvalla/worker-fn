@@ -11,21 +11,43 @@ resource "google_cloud_run_v2_service" "worker" {
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   template {
-    service_account = data.google_service_account.worker_sa.email
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+    
+    volumes {
+      name = "secret-volume"
+      secret {
+        secret = "worker-sa-key"
+        items {
+          path    = "credentials.json"
+          version = "latest"
+        }
+      }
+    }
+
     containers {
       image = "${var.location}-docker.pkg.dev/${var.project_id}/${var.repository_id}/${var.image_name}:${var.image_tag}"
+      
       ports {
         container_port = 8080
       }
+
+      volume_mounts {
+        name       = "secret-volume"
+        mount_path = "/app"
+      }
+
       env {
-          name  = "GOOGLE_CLOUD_PROJECT"
-          value = var.project_id
-        }
-        env {
-          name = "GCP_LOCATION"
-          value = var.location
-        }
+        name  = "GOOGLE_APPLICATION_CREDENTIALS"
+        value = "/app/credentials.json"
+      }
+      env {
+        name  = "GOOGLE_CLOUD_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name = "GCP_LOCATION"
+        value = var.location
+      }
       env {
         name  = "REDIS_HOST"
         value = var.redis_host
