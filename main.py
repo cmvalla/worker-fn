@@ -113,14 +113,9 @@ def worker(request):
         extracted_json = extract_json_from_response(response.text)
         logging.info("Successfully parsed JSON from model output.")
 
-        # 3. Send the result to the callback URL with authentication
-        id_token = get_id_token(audience=callback_url)
-        if not id_token:
-            return "Error: Could not generate authentication token", 500
-
+        # 3. Send the result to the callback URL
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f'Bearer {id_token}'
         }
         
         callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers, timeout=60)
