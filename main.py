@@ -48,6 +48,22 @@ TEXT:
 JSON:
 """
 
+def extract_json_from_response(text):
+    """Extracts a JSON object from the model's text response."""
+    # Use a regex to find the JSON block, even with markdown backticks
+    match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
+    if match:
+        json_str = match.group(2).strip()
+    else:
+        # If no markdown, assume the whole text is the JSON
+        json_str = text.strip()
+
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse JSON: {e}. Raw text: '{json_str}'")
+        raise
+
 @functions_framework.http
 def worker(request):
     """
