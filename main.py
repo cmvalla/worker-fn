@@ -108,7 +108,7 @@ def worker(request):
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(GCP_PROJECT, results_topic)
         future = publisher.publish(topic_path, data=json.dumps(extracted_json).encode("utf-8"))
-        message_id = future.get()
+        message_id = future.result()
         logging.info(f"Successfully published message {message_id} to topic {topic_path}.")
 
         return "OK", 200
