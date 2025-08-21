@@ -14,7 +14,7 @@ import google.auth.transport.requests
 logging_client = google.cloud.logging.Client()
 logging_client.setup_logging()
 logging.basicConfig(level=logging.DEBUG) # Set root logger to DEBUG
-genai.configure(api_key="AIzaSyC0qz3A96tG_ngg5fax1PDH9TwXqPMuQqc")
+genai.configure(api_key="AIzaSyCLvNTVrJAF-ekT8qeMJaILw0TwBN0RA1g")
 
 # --- Environment Variables ---
 GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
