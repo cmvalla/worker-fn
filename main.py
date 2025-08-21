@@ -94,12 +94,13 @@ def worker(request):
 
         # 2. Call the model to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
-        logging.info("Calling Generative AI model...")
+        logging.info("Calling Generative AI model with prompt:")
+        logging.info(prompt)
         response = generation_model.generate_content(prompt)
         logging.info("Received response from Generative AI.")
         
         extracted_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        logging.debug(f"Raw response text from model: {extracted_text}")
+        logging.info(f"Raw response text from model: {extracted_text}")
         
         extracted_json = json.loads(extracted_text)
         logging.info(f"Successfully parsed JSON from model output.")
