@@ -84,6 +84,12 @@ def worker(request):
         return "ERROR: Client initialization failed", 500
 
     try:
+        creds, project_id = google.auth.default()
+        logging.info(f"Worker function is running with service account: {creds.service_account_email}")
+    except Exception as e:
+        logging.error(f"Could not retrieve service account credentials: {e}")
+
+    try:
         # 1. Parse the incoming request
         request_json = request.get_json(silent=True)
         if not request_json:
@@ -102,6 +108,7 @@ def worker(request):
         # 2. Call the model to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
         response = generation_model.generate_content(prompt)
+        logging.info(f"AI Response: {response.text}")
         
         extracted_json = extract_json_from_response(response.text)
         logging.info("Successfully parsed JSON from model output.")
@@ -119,6 +126,7 @@ def worker(request):
         callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers, timeout=60)
         callback_response.raise_for_status()
         logging.info(f"Successfully sent results to callback URL. Status: {callback_response.status_code}")
+        logging.info(f"Callback response: {callback_response.text}")
 
         return "OK", 200
 
