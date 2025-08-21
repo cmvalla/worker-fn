@@ -1,12 +1,6 @@
 # Ignore credentials
 credentials.json
 
-# Ignore Python artifacts
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
 # Ignore test files
 test_worker_local.py
 check_auth_version.py
