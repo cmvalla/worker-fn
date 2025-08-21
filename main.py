@@ -8,6 +8,7 @@ import requests
 import google.generativeai as genai
 import google.auth
 import google.auth.transport.requests
+import google.oauth2.id_token
 
 # --- Boilerplate and Configuration ---
 
@@ -49,10 +50,9 @@ JSON:
 def get_id_token(audience):
     """Fetches a Google-signed ID token for the specified audience."""
     try:
-        creds, project = google.auth.default()
         auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
-        return creds.id_token
+        id_token = google.oauth2.id_token.fetch_id_token(auth_req, audience)
+        return id_token
     except Exception as e:
         logging.error(f"Failed to fetch ID token for audience {audience}: {e}", exc_info=True)
         return None
