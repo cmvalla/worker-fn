@@ -10,7 +10,7 @@ WORKDIR /app
 # Copy local code to the container image.
 COPY . .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && ls -latr
 
 # Expose the port the function is listening on.
 EXPOSE 8080
