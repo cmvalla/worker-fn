@@ -9,6 +9,7 @@ import google.generativeai as genai
 import google.auth
 import google.auth.transport.requests
 import google.oauth2.id_token
+from google.cloud import pubsub_v1
 
 # --- Boilerplate and Configuration ---
 
@@ -47,37 +48,11 @@ TEXT:
 JSON:
 """
 
-def get_id_token(audience):
-    """Fetches a Google-signed ID token for the specified audience."""
-    try:
-        auth_req = google.auth.transport.requests.Request()
-        id_token = google.oauth2.id_token.fetch_id_token(auth_req, audience)
-        return id_token
-    except Exception as e:
-        logging.error(f"Failed to fetch ID token for audience {audience}: {e}", exc_info=True)
-        return None
-
-def extract_json_from_response(text):
-    """Extracts a JSON object from the model's text response."""
-    # Use a regex to find the JSON block, even with markdown backticks
-    match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        json_str = match.group(2).strip()
-    else:
-        # If no markdown, assume the whole text is the JSON
-        json_str = text.strip()
-
-    try:
-        return json.loads(json_str)
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse JSON: {e}. Raw text: '{json_str}'")
-        raise
-
 @functions_framework.http
 def worker(request):
     """
     This function receives a chunk of text, extracts entities and relationships
-    using a Generative AI model, and sends the result to a callback URL.
+    using a Generative AI model, and sends the result to a Pub/Sub topic.
     """
     if not generation_model:
         logging.critical("Generative AI client not initialized. Aborting function.")
@@ -97,13 +72,13 @@ def worker(request):
             return "Bad Request: Invalid JSON", 400
 
         text_chunk = request_json.get("chunk", {}).get("page_content")
-        callback_url = request_json.get("callback_url")
+        results_topic = request_json.get("results_topic")
 
-        if not text_chunk or not callback_url:
-            logging.error("Missing 'text_chunk' or 'callback_url' in the request.")
+        if not text_chunk or not results_topic:
+            logging.error("Missing 'text_chunk' or 'results_topic' in the request.")
             return "Bad Request: Missing required fields", 400
 
-        logging.info(f"Worker received chunk. Callback URL: {callback_url}")
+        logging.info(f"Worker received chunk. Results topic: {results_topic}")
 
         # 2. Call the model to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
@@ -113,23 +88,17 @@ def worker(request):
         extracted_json = extract_json_from_response(response.text)
         logging.info("Successfully parsed JSON from model output.")
 
-        # 3. Send the result to the callback URL
-        headers = {
-            'Content-Type': 'application/json',
-        }
-        
-        callback_response = requests.post(callback_url, data=json.dumps(extracted_json), headers=headers, timeout=60)
-        callback_response.raise_for_status()
-        logging.info(f"Successfully sent results to callback URL. Status: {callback_response.status_code}")
-        logging.info(f"Callback response: {callback_response.text}")
+        # 3. Send the result to the Pub/Sub topic
+        publisher = pubsub_v1.PublisherClient()
+        topic_path = publisher.topic_path(GCP_PROJECT, results_topic)
+        future = publisher.publish(topic_path, data=json.dumps(extracted_json).encode("utf-8"))
+        message_id = future.get()
+        logging.info(f"Successfully published message {message_id} to topic {topic_path}.")
 
         return "OK", 200
 
     except json.JSONDecodeError:
         return "Error processing model output", 500
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to send result to callback URL: {e}", exc_info=True)
-        return "Error calling callback URL", 500
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}", exc_info=True)
         return "Internal Server Error", 500
