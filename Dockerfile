@@ -10,10 +10,10 @@ WORKDIR /app
 # Copy local code to the container image.
 COPY . .
 
-RUN pip install --no-cache-dir -r requirements.txt && ls -latr
+RUN pip install --no-cache-dir -r requirements.txt &&pwd && ls -latr
 
 # Expose the port the function is listening on.
 EXPOSE 8080
 
 # Set the entrypoint for the function.
-CMD ["functions-framework", "--target=worker", "--source=main.py"]
+CMD ["functions-framework", "--target=worker", "--source=/app/main.py"]
