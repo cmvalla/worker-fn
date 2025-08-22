@@ -41,6 +41,8 @@ steps:
       -var="spanner_database=${_SPANNER_DATABASE}" \
       -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
       -var="redis_password=${_REDIS_PASSWORD}" \
+      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
+      -var="redis_password=${_REDIS_PASSWORD}" \
       -var="consolidation_topic=${_CONSOLIDATION_TOPIC}"
   waitFor: ['push']
 
