@@ -1,9 +1,18 @@
+import os
+import re
+import json
+import logging
+import redis
+import google.generativeai as genai
+from google.cloud import pubsub_v1
+import functions_framework
+from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
 
 # --- Boilerplate and Configuration ---
 
 # Setup structured logging
-logging_client = google.cloud.logging.Client()
+logging_client = cloud_logging.Client()
 logging_client.setup_logging()
 logging.basicConfig(level=logging.INFO)
 
