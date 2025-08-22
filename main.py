@@ -4,12 +4,9 @@ import re
 import functions_framework
 import google.cloud.logging
 import logging
-import requests
-import google.generativeai as genai
-import google.auth
-import google.auth.transport.requests
-import google.oauth2.id_token
+import redis
 from google.cloud import pubsub_v1
+import google.generativeai as genai
 
 # --- Boilerplate and Configuration ---
 
@@ -21,18 +18,34 @@ logging.basicConfig(level=logging.INFO)
 # --- Environment Variables ---
 GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.environ.get("GCP_LOCATION", "europe-west1")
+REDIS_HOST = os.environ.get("REDIS_HOST")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD")
+CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
+
 logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")
+if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
+    logging.critical("FATAL: Missing one or more required environment variables: REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC")
 
 # --- Global Clients ---
 generation_model = None
+redis_client = None
+
 try:
     logging.info("Initializing Generative AI client...")
-    # ADC will be used by default
     genai.configure(transport="rest")
     generation_model = genai.GenerativeModel("gemini-1.5-flash-latest")
     logging.info("Generative AI client initialized successfully.")
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Generative AI client: {e}", exc_info=True)
+
+try:
+    logging.info(f"Initializing Redis client for host '{REDIS_HOST}'...")
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, ssl=True, ssl_cert_reqs=None)
+    redis_client.ping()
+    logging.info("Redis client initialized and connected successfully.")
+except Exception as e:
+    logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
 # --- Prompt Template for Knowledge Extraction ---
 EXTRACTION_PROMPT = """
@@ -50,12 +63,10 @@ JSON:
 
 def extract_json_from_response(text):
     """Extracts a JSON object from the model's text response."""
-    # Use a regex to find the JSON block, even with markdown backticks
     match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
     if match:
         json_str = match.group(2).strip()
     else:
-        # If no markdown, assume the whole text is the JSON
         json_str = text.strip()
 
     try:
@@ -67,18 +78,12 @@ def extract_json_from_response(text):
 @functions_framework.http
 def worker(request):
     """
-    This function receives a chunk of text, extracts entities and relationships
-    using a Generative AI model, and sends the result to a Pub/Sub topic.
+    Processes a text chunk, extracts knowledge, stores it in Redis,
+    and triggers the final consolidation if it's the last chunk.
     """
-    if not generation_model:
-        logging.critical("Generative AI client not initialized. Aborting function.")
+    if not generation_model or not redis_client:
+        logging.critical("FATAL: A required client (GenAI or Redis) is not initialized.")
         return "ERROR: Client initialization failed", 500
-
-    try:
-        creds, project_id = google.auth.default()
-        logging.info(f"Worker function is running with service account: {creds.service_account_email}")
-    except Exception as e:
-        logging.error(f"Could not retrieve service account credentials: {e}")
 
     try:
         # 1. Parse the incoming request
@@ -88,33 +93,47 @@ def worker(request):
             return "Bad Request: Invalid JSON", 400
 
         text_chunk = request_json.get("chunk", {}).get("page_content")
-        results_topic = request_json.get("results_topic")
+        batch_id = request_json.get("batch_id")
+        total_chunks = request_json.get("total_chunks")
 
-        if not text_chunk or not results_topic:
-            logging.error("Missing 'text_chunk' or 'results_topic' in the request.")
+        if not all([text_chunk, batch_id, total_chunks]):
+            logging.error("Missing 'chunk', 'batch_id', or 'total_chunks' in the request.")
             return "Bad Request: Missing required fields", 400
 
-        logging.info(f"Worker received chunk. Results topic: {results_topic}")
+        logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
 
         # 2. Call the model to extract knowledge
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
         response = generation_model.generate_content(prompt)
-        logging.info(f"AI Response: {response.text}")
-        
         extracted_json = extract_json_from_response(response.text)
-        logging.info("Successfully parsed JSON from model output.")
+        logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
 
-        # 3. Send the result to the Pub/Sub topic
-        publisher = pubsub_v1.PublisherClient()
-        topic_path = publisher.topic_path(GCP_PROJECT, results_topic)
-        future = publisher.publish(topic_path, data=json.dumps(extracted_json).encode("utf-8"))
-        message_id = future.result()
-        logging.info(f"Successfully published message {message_id} to topic {topic_path}.")
+        # 3. Store result in Redis and check for completion
+        results_key = f"batch:{batch_id}:results"
+        counter_key = f"batch:{batch_id}:counter"
+
+        # Push result and increment counter
+        redis_client.lpush(results_key, json.dumps(extracted_json))
+        current_count = redis_client.incr(counter_key)
+        
+        logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
+
+        # 4. If all chunks are processed, trigger consolidation
+        if current_count >= total_chunks:
+            logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = publisher.topic_path(GCP_PROJECT, CONSOLIDATION_TOPIC)
+            
+            message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
+            future = publisher.publish(topic_path, data=message_data)
+            message_id = future.result()
+            
+            logging.info(f"Successfully published consolidation trigger message {message_id} to topic {topic_path}.")
 
         return "OK", 200
 
     except json.JSONDecodeError:
         return "Error processing model output", 500
     except Exception as e:
-        logging.error(f"An unexpected error occurred: {e}", exc_info=True)
+        logging.error(f"An unexpected error occurred in worker for batch '{batch_id}': {e}", exc_info=True)
         return "Internal Server Error", 500
