@@ -63,3 +63,8 @@ variable "consolidation_topic" {
   type        = string
   description = "The Pub/Sub topic for consolidation."
 }
+
+variable "vpc_connector" {
+  type        = string
+  description = "The Serverless VPC Access connector name."
+}

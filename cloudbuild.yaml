@@ -41,7 +41,8 @@ steps:
       -var="spanner_database=${_SPANNER_DATABASE}" \
       -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
       -var="redis_password=${_REDIS_PASSWORD}" \
-      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}"
+      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
+      -var="vpc_connector=${_VPC_CONNECTOR}"
   waitFor: ['push']
 
 # Clean up old images
@@ -73,3 +74,4 @@ substitutions:
   _SPANNER_DATABASE: 'my-spanner-database' # Placeholder, will be overridden by Terraform
   _WORKER_SA_EMAIL: 'worker-sa@${PROJECT_ID}.iam.gserviceaccount.com' # Placeholder, will be overridden by Terraform
   _PROJECT_SUFFIX: '' # This will be overridden by the trigger
+  _VPC_CONNECTOR: 'serverless-connector' # This will be overridden by the trigger

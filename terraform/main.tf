@@ -15,8 +15,16 @@ resource "google_cloud_run_v2_service" "worker" {
     update = "2m"
   }
 
+  traffic {
+    type = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
+  }
   template {
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+    vpc_access {
+      connector = var.vpc_connector
+      egress = "ALL_TRAFFIC"
+    }
     
     volumes {
       name = "secret-volume"
