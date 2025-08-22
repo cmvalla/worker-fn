@@ -3,6 +3,11 @@ data "google_service_account" "worker_sa" {
   project    = var.project_id
 }
 
+data "google_secret_manager_secret_version" "worker_sa_key" {
+  project = var.project_id
+  secret  = var.worker_sa_key_secret_id
+}
+
 resource "google_cloud_run_v2_service" "worker" {
   name     = "worker-fn"
   location = var.location
@@ -28,7 +33,7 @@ resource "google_cloud_run_v2_service" "worker" {
     volumes {
       name = "secret-volume"
       secret {
-        secret = var.worker_sa_key_secret_id
+        secret = data.google_secret_manager_secret_version.worker_sa_key.secret
         items {
           path    = "credentials.json"
           version = "latest"
