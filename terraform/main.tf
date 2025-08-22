@@ -12,6 +12,7 @@ resource "google_cloud_run_v2_service" "worker" {
 
   timeouts {
     create = "2m"
+    update = "2m"
   }
 
   template {
