@@ -28,7 +28,7 @@ steps:
   - |
     gcloud container clusters get-credentials "graphrag-gke" --region "${_REGION}" --project "${_PROJECT_ID}"
     REDIS_IP=$(kubectl -n redis get service redis-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-    echo "REDIS_IP=${REDIS_IP}" > /workspace/redis.env
+    echo "export REDIS_IP=${REDIS_IP}" > /workspace/redis.env
 
 # Run Terraform to deploy the function and its resources
 - name: 'hashicorp/terraform:1.0.0'
