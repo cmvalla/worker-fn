@@ -11,8 +11,8 @@ resource "google_cloud_run_v2_service" "worker" {
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   timeouts {
-    create = "2m"
-    update = "2m"
+    create = "3m"
+    update = "3m"
   }
 
   traffic {
