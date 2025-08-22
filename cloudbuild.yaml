@@ -29,7 +29,7 @@ steps:
     cd terraform
     terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
     terraform apply -auto-approve \
-      -var="project_id=spanner-demo-kid" \
+      -var="project_id=${_PROJECT_ID}" \
       -var="region=${_REGION}" \
       -var="location=${_LOCATION}" \
       -var="repository_id=${_REPOSITORY_ID}" \
@@ -39,7 +39,7 @@ steps:
       -var="redis_port=${_REDIS_PORT}" \
       -var="spanner_instance=${_SPANNER_INSTANCE}" \
       -var="spanner_database=${_SPANNER_DATABASE}" \
-      -var="worker_sa_email=worker-sa@spanner-demo-kid.iam.gserviceaccount.com" \
+      -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
       -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
       -var="vpc_connector=${_VPC_CONNECTOR}"
   waitFor: ['push']
