@@ -25,9 +25,9 @@ steps:
   entrypoint: 'bash'
   args:
   - '-c'
-  - |
+  - | 
     gcloud container clusters get-credentials "graphrag-gke" --region "${_REGION}" --project "${_PROJECT_ID}"
-    REDIS_IP=$(kubectl -n redis get service redis-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    REDIS_IP=$(kubectl -n redis get service redis-service -o jsonpath='{.spec.clusterIP}')
     echo "export REDIS_IP=${REDIS_IP}" > /workspace/redis.env
 
 # Run Terraform to deploy the function and its resources
@@ -36,7 +36,7 @@ steps:
   entrypoint: 'sh'
   args:
   - '-c'
-  - |
+  - | 
     source /workspace/redis.env
     cd terraform
     terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
@@ -80,10 +80,10 @@ substitutions:
   _REPOSITORY_ID: 'my-docker-repo'
   _IMAGE_NAME: 'worker'
   _REGION: 'europe-west1'
-  _REDIS_PORT: '6379' # Placeholder, will be overridden by Terraform
-  _SPANNER_INSTANCE: 'my-spanner-instance' # Placeholder, will be overridden by Terraform
-  _SPANNER_DATABASE: 'my-spanner-database' # Placeholder, will be overridden by Terraform
-  _WORKER_SA_EMAIL: 'worker-sa@${PROJECT_ID}.iam.gserviceaccount.com' # Placeholder, will be overridden by Terraform
-  _PROJECT_SUFFIX: '' # This will be overridden by the trigger
-  _VPC_CONNECTOR: 'projects/spanner-demo-kid/locations/europe-west1/connectors/serverless-connector' # This will be overridden by the trigger
-  _WORKER_SA_KEY_SECRET_ID: '' # This will be overridden by the trigger
+  _REDIS_PORT: '6379'
+  _SPANNER_INSTANCE: 'my-spanner-instance'
+  _SPANNER_DATABASE: 'my-spanner-database'
+  _WORKER_SA_EMAIL: 'worker-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+  _PROJECT_SUFFIX: ''
+  _VPC_CONNECTOR: 'projects/spanner-demo-kid/locations/europe-west1/connectors/serverless-connector'
+  _WORKER_SA_KEY_SECRET_ID: ''
