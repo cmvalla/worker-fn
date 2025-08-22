@@ -41,7 +41,7 @@ except Exception as e:
 
 try:
     logging.info(f"Initializing Redis client for host '{REDIS_HOST}'...")
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, socket_connect_timeout=10)
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, socket_connect_timeout=10, ssl=False)
     redis_client.ping()
     logging.info("Redis client initialized and connected successfully.")
 except redis.exceptions.ConnectionError as e:
