@@ -28,8 +28,8 @@ resource "google_cloud_run_v2_service" "worker" {
     
     volumes {
       name = "secret-volume"
-      secret {
-        secret = google_secret_manager_secret.worker_sa_key.secret_id
+            secret {
+        secret = var.worker_sa_key_secret_id
         items {
           path    = "credentials.json"
           version = "latest"

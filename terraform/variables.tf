@@ -62,3 +62,8 @@ variable "vpc_connector" {
   type        = string
   description = "The Serverless VPC Access connector name."
 }
+
+variable "worker_sa_key_secret_id" {
+  type        = string
+  description = "The ID of the Secret Manager secret containing the worker service account key."
+}
