@@ -9,6 +9,7 @@ WORKDIR /app
 
 # Copy local code to the container image.
 COPY . .
+RUN pip install -r requirements.txt
 
 RUN mkdir /app/creds && pwd && ls -latr
 
