@@ -25,7 +25,7 @@ steps:
   entrypoint: 'sh'
   args:
   - '-c'
-  - |
+  - | 
     cd terraform
     terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
     terraform apply -auto-approve \
@@ -40,8 +40,6 @@ steps:
       -var="spanner_instance=${_SPANNER_INSTANCE}" \
       -var="spanner_database=${_SPANNER_DATABASE}" \
       -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
-      -var="redis_password=${_REDIS_PASSWORD}" \
-      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
       -var="redis_password=${_REDIS_PASSWORD}" \
       -var="consolidation_topic=${_CONSOLIDATION_TOPIC}"
   waitFor: ['push']
