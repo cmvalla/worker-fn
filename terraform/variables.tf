@@ -65,5 +65,5 @@ variable "vpc_connector" {
 
 variable "worker_sa_key_secret_id" {
   type        = string
-  description = "The ID of the Secret Manager secret containing the worker service account key."
+  description = "The full resource name of the Secret Manager secret containing the worker service account key."
 }
