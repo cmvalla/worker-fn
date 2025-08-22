@@ -39,7 +39,9 @@ steps:
       -var="redis_port=${_REDIS_PORT}" \
       -var="spanner_instance=${_SPANNER_INSTANCE}" \
       -var="spanner_database=${_SPANNER_DATABASE}" \
-      -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com"
+      -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
+      -var="redis_password=${_REDIS_PASSWORD}" \
+      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}"
   waitFor: ['push']
 
 # Clean up old images

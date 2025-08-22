@@ -52,3 +52,14 @@ variable "spanner_database" {
   type        = string
   description = "The Spanner database ID."
 }
+
+variable "redis_password" {
+  type        = string
+  description = "The Redis password."
+  sensitive   = true
+}
+
+variable "consolidation_topic" {
+  type        = string
+  description = "The Pub/Sub topic for consolidation."
+}

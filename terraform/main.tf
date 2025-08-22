@@ -64,6 +64,14 @@ resource "google_cloud_run_v2_service" "worker" {
         name  = "SPANNER_DATABASE"
         value = var.spanner_database
       }
+      env {
+        name = "REDIS_PASSWORD"
+        value = var.redis_password
+      }
+      env {
+        name = "CONSOLIDATION_TOPIC"
+        value = var.consolidation_topic
+      }
     }
   }
 }
