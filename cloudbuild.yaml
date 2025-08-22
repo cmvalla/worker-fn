@@ -74,4 +74,4 @@ substitutions:
   _SPANNER_DATABASE: 'my-spanner-database' # Placeholder, will be overridden by Terraform
   _WORKER_SA_EMAIL: 'worker-sa@${PROJECT_ID}.iam.gserviceaccount.com' # Placeholder, will be overridden by Terraform
   _PROJECT_SUFFIX: '' # This will be overridden by the trigger
-  _VPC_CONNECTOR: 'serverless-connector' # This will be overridden by the trigger
+  _VPC_CONNECTOR: 'projects/spanner-demo-kid/locations/europe-west1/connectors/serverless-connector' # This will be overridden by the trigger
