@@ -10,6 +10,10 @@ resource "google_cloud_run_v2_service" "worker" {
   deletion_protection = false
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
+  timeouts {
+    create = "2m"
+  }
+
   template {
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     
