@@ -1,12 +1,4 @@
-import os
-import json
-import re
-import functions_framework
-import google.cloud.logging
-import logging
-import redis
-from google.cloud import pubsub_v1
-import google.generativeai as genai
+import google.cloud.secretmanager as secretmanager
 
 # --- Boilerplate and Configuration ---
 
@@ -20,7 +12,8 @@ GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.environ.get("GCP_LOCATION", "europe-west1")
 REDIS_HOST = os.environ.get("REDIS_HOST")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD")
+# Retrieve Redis password from Secret Manager
+REDIS_PASSWORD = secretmanager.SecretManagerServiceClient().access_secret_version(request={"name": f"projects/{GCP_PROJECT}/secrets/redis-password/versions/latest"}).payload.data.decode("UTF-8")
 CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
 
 logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")

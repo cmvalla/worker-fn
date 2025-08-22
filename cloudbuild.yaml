@@ -40,7 +40,6 @@ steps:
       -var="spanner_instance=${_SPANNER_INSTANCE}" \
       -var="spanner_database=${_SPANNER_DATABASE}" \
       -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
-      -var="redis_password=${_REDIS_PASSWORD}" \
       -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
       -var="vpc_connector=${_VPC_CONNECTOR}"
   waitFor: ['push']
