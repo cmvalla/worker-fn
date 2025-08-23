@@ -44,7 +44,7 @@ steps:
       -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
       -var="vpc_connector=${_VPC_CONNECTOR}" \
       -var="worker_sa_key_secret_id=${_WORKER_SA_KEY_SECRET_ID}"
-  waitFor: ['push']
+  waitFor: ['push'] # Changed dependency
 
 # Clean up old images
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
