@@ -1,4 +1,13 @@
 steps:
+# Download the terraform.tfvars from Secret Manager
+- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
+  id: download-tfvars
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    gcloud secrets versions access latest --secret="worker-tfvars" --project="${_PROJECT_ID}" > terraform/terraform.tfvars
+
 # Build and tag the Docker image
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
   id: build
@@ -13,6 +22,7 @@ steps:
     '-f', 'Dockerfile',
     '.'
   ]
+  waitFor: ['download-tfvars']
 
 # Push the images
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
@@ -26,25 +36,11 @@ steps:
   entrypoint: 'sh'
   args:
   - '-c'
-  - | 
+  - |
     cd terraform
     terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
-    terraform apply -auto-approve \
-      -var="project_id=${_PROJECT_ID}" \
-      -var="region=${_REGION}" \
-      -var="location=${_LOCATION}" \
-      -var="repository_id=${_REPOSITORY_ID}" \
-      -var="image_name=${_IMAGE_NAME}" \
-      -var="image_tag=$BUILD_ID" \
-      -var="redis_host=${_REDIS_IP}" \
-      -var="redis_port=${_REDIS_PORT}" \
-      -var="spanner_instance=${_SPANNER_INSTANCE}" \
-      -var="spanner_database=${_SPANNER_DATABASE}" \
-      -var="worker_sa_email=worker-sa@${_PROJECT_ID}.iam.gserviceaccount.com" \
-      -var="consolidation_topic=${_CONSOLIDATION_TOPIC}" \
-      -var="vpc_connector=${_VPC_CONNECTOR}" \
-      -var="worker_sa_key_secret_id=${_WORKER_SA_KEY_SECRET_ID}"
-  waitFor: ['push'] # Changed dependency
+    terraform apply -auto-approve -var="image_tag=$BUILD_ID"
+  waitFor: ['push']
 
 # Clean up old images
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
