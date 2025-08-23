@@ -63,7 +63,7 @@ substitutions:
   _LOCATION: 'europe-west1'
   _PROJECT_ID: '${PROJECT_ID}'
   _REPOSITORY_ID: 'my-docker-repo'
-  _IMAGE_NAME: 'graphrag-fn-worker'
+  _IMAGE_NAME: 'worker'
   _REGION: 'europe-west1'
   _REDIS_PORT: '6379'
   _SPANNER_INSTANCE: 'my-spanner-instance'
