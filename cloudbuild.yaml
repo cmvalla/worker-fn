@@ -20,7 +20,7 @@ steps:
   waitFor: ['build']
 
 # Run Terraform to deploy the function and its resources
-- name: 'hashicorp/terraform:1.0.0'
+- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
   id: terraform-deploy
   entrypoint: 'sh'
   args:
@@ -46,7 +46,7 @@ steps:
   waitFor: ['push']
 
 # Clean up old images
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
   id: cleanup-images
   entrypoint: 'bash'
   args:
