@@ -17,8 +17,8 @@ steps:
     '--build-arg', 'BASE_IMAGE_LOCATION=${_LOCATION}',
     '--build-arg', 'PROJECT_ID=${_PROJECT_ID}',
     '--build-arg', 'REPOSITORY_ID=${_REPOSITORY_ID}',
-    '-t', '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:$BUILD_ID',
-    '-t', '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:latest',
+    '-t', 'gcr.io/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:$BUILD_ID',
+    '-t', 'gcr.io/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:latest',
     '-f', 'Dockerfile',
     '.'
   ]
@@ -27,7 +27,7 @@ steps:
 # Push the images
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
   id: push
-  args: ['docker', 'push', '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}', '--all-tags']
+  args: ['docker', 'push', 'gcr.io/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}', '--all-tags']
   waitFor: ['build']
 
 # Run Terraform to deploy the function and its resources
@@ -55,8 +55,8 @@ steps:
   waitFor: ['terraform-deploy']
 
 images:
-- '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:$BUILD_ID'
-- '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:latest'
+- 'gcr.io/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:$BUILD_ID'
+- 'gcr.io/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:latest'
 options:
   logging: CLOUD_LOGGING_ONLY
 substitutions:

@@ -28,6 +28,11 @@ variable "image_tag" {
   description = "The tag of the Docker image, typically the Build ID."
 }
 
+variable "image_url" {
+  type        = string
+  description = "The full URL of the Docker image to deploy."
+}
+
 variable "worker_sa_email" {
   type        = string
   description = "The email of the service account for the worker function."

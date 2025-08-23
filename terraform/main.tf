@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_service" "worker" {
     }
 
     containers {
-      image = "${var.location}-docker.pkg.dev/${var.project_id}/${var.repository_id}/${var.image_name}:${var.image_tag}"
+      image = var.image_url
       
       ports {
         container_port = 8080
