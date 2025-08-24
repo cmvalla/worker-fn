@@ -29,7 +29,11 @@ resource "google_cloud_run_v2_service" "worker" {
       connector = var.vpc_connector
       egress = "ALL_TRAFFIC"
     }
-    
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+    max_instance_request_concurrency = 50
     volumes {
       name = "secret-volume"
       secret {
@@ -43,7 +47,12 @@ resource "google_cloud_run_v2_service" "worker" {
 
     containers {
       image = "${var.image_url}:${var.image_tag}"
-      
+      resources {
+        limits = {
+          "memory": "256Mi",
+          "cpu": "1"
+        }
+      }
       ports {
         container_port = 8080
       }

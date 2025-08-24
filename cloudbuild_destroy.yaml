@@ -8,9 +8,9 @@ steps:
   - |
     gcloud secrets versions access latest --secret="worker-tfvars" --project="${_PROJECT_ID}" > terraform/terraform.tfvars
 
-# Run Terraform to deploy the function and its resources
+# Run Terraform to destroy the function and its resources
 - name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
-  id: terraform-deploy
+  id: terraform-destroy
   entrypoint: 'sh'
   args:
   - '-c'
