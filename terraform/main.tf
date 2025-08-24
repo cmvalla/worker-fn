@@ -47,12 +47,7 @@ resource "google_cloud_run_v2_service" "worker" {
 
     containers {
       image = "${var.image_url}:${var.image_tag}"
-      resources {
-        limits = {
-          "memory": "256Mi",
-          "cpu": "1"
-        }
-      }
+
       ports {
         container_port = 8080
       }
