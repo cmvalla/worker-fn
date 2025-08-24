@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_service" "worker" {
     }
 
     containers {
-      image = var.image_url
+      image = "${var.image_url}:${var.image_tag}"
       
       ports {
         container_port = 8080

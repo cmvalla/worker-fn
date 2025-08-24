@@ -1,6 +1,6 @@
 # Service account keys
 credentials.json
-
+terraform.tfvars
 
 # Python
 __pycache__/
