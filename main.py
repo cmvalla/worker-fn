@@ -36,7 +36,7 @@ redis_client = None
 try:
     logging.info("Initializing Generative AI client...")
     genai.configure(transport="rest")
-    generation_model = genai.GenerativeModel("gemini-1.5-flash-latest")
+    generation_model = genai.GenerativeModel("gemini-2.5-flash")
     logging.info("Generative AI client initialized successfully.")
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Generative AI client: {e}", exc_info=True)
