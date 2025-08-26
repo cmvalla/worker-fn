@@ -107,7 +107,6 @@ def worker(request):
     try:
         # 1. Parse the incoming request
         request_json = request.get_json(silent=True)
-        logging.info(f"Received request_json: {request_json}")
         if not request_json:
             logging.error("Request body is not valid JSON.")
             return "Bad Request: Invalid JSON", 400
