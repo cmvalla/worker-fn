@@ -22,8 +22,12 @@ steps:
 # Step 1.5: Download NLTK data
 - name: 'python' # Use a Python image or the builder image if Python is available
   id: download-nltk-data
-  entrypoint: python3
-  args: ['-m', 'nltk.downloader', 'punkt']
+  entrypoint: bash
+  args:
+  - -c
+  - |
+    pip install nltk
+    python3 -m nltk.downloader punkt
   waitFor: ['build-and-push']
 
 # Step 2A: Deploy the service
