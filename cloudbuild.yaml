@@ -27,7 +27,7 @@ steps:
   - -c
   - |
     pip install nltk
-    python3 -m nltk.downloader punkt
+    python3 -m nltk.downloader punkt_tab
   waitFor: ['build-and-push']
 
 # Step 2A: Deploy the service
