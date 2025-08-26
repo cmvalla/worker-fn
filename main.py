@@ -120,26 +120,39 @@ def worker(request):
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
         
-        # 2. Clean the text chunk
-        cleaned_text_chunk = clean_text(text_chunk)
-        logging.info(f"Processing cleaned chunk: {cleaned_text_chunk}")
-
-        # 3. Call the model to extract knowledge
-        prompt = EXTRACTION_PROMPT.format(text_chunk=cleaned_text_chunk)
-        response = generation_model.generate_content(prompt)
-        extracted_json = extract_json_from_response(response.text)
-        logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
-        logging.info(f"Extracted data: {json.dumps(extracted_json)}")
-
-
-        # 4. Store result in Redis and check for completion
-        results_key = f"batch:{batch_id}:results"
-        counter_key = f"batch:{batch_id}:counter"
-
-        # Push result and increment counter
-        redis_client.lpush(results_key, json.dumps(extracted_json))
-        current_count = redis_client.incr(counter_key)
+        # 2. Split the chunk into sentences and process each
+        sentences = nltk.sent_tokenize(text_chunk)
         
+        for sentence in sentences:
+            if not sentence.strip(): # Skip empty sentences
+                continue
+
+            cleaned_sentence = clean_text(sentence) # Clean each sentence
+            logging.info(f"Processing cleaned sentence: {cleaned_sentence}")
+            
+            # 3. Call the model to extract knowledge for each sentence
+            prompt = EXTRACTION_PROMPT.format(text_chunk=cleaned_sentence)
+            response = generation_model.generate_content(prompt)
+            extracted_json = extract_json_from_response(response.text)
+            logging.info(f"Successfully parsed JSON from model output for sentence in batch '{batch_id}'.")
+            logging.info(f"Extracted data for sentence: {json.dumps(extracted_json)}")
+            
+            # 4. Store result and sentence in Redis
+            # The key for Redis will be batch_id:sentence_hash to avoid duplicates
+            sentence_hash = hashlib.md5(sentence.encode('utf-8')).hexdigest()
+            redis_key = f"batch:{batch_id}:sentence:{sentence_hash}"
+            
+            # Store a dictionary containing the extracted JSON and the original sentence
+            redis_value = {
+                "sentence": sentence,
+                "extracted_data": extracted_json
+            }
+            redis_client.set(redis_key, json.dumps(redis_value)) # Use SET instead of LPUSH for unique sentences
+            
+            logging.info(f"Processed sentence and stored in Redis for batch '{batch_id}'.")
+        
+        # Increment the counter for the entire chunk, not per sentence
+        current_count = redis_client.incr(counter_key)
         logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
 
         # 5. If all chunks are processed, trigger consolidation
