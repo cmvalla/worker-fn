@@ -86,8 +86,7 @@ def clean_text(text):
     """
     # Remove HTML tags
     text = re.sub(r'<[^>]+>', '', text)
-    # Remove special characters and punctuation
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    
     # Convert to lowercase
     text = text.lower()
     # Remove extra whitespace
