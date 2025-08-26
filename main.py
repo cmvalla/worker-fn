@@ -8,6 +8,8 @@ from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
+import nltk
+import hashlib
 
 # --- Boilerplate and Configuration -- -
 
