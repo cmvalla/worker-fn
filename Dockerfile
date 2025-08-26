@@ -11,6 +11,9 @@ COPY requirements.txt .
 # This layer will be cached and only re-run if requirements.txt changes
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download NLTK data
+RUN python3 -m nltk.downloader punkt_tab
+
 # Copy the rest of the application code
 COPY . .
 
