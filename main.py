@@ -79,6 +79,21 @@ def extract_json_from_response(text):
         logging.error(f"Failed to parse JSON: {e}. Raw text: '{json_str}'")
         raise
 
+def clean_text(text):
+    """
+    Cleans the input text by removing HTML tags, special characters,
+    and converting it to lowercase.
+    """
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Remove special characters and punctuation
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    # Convert to lowercase
+    text = text.lower()
+    # Remove extra whitespace
+    text = ' '.join(text.split())
+    return text
+
 @functions_framework.http
 def worker(request):
     """
@@ -105,17 +120,20 @@ def worker(request):
             return "Bad Request: Missing required fields", 400
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
-        logging.info(f"Processing chunk: {text_chunk}")
+        
+        # 2. Clean the text chunk
+        cleaned_text_chunk = clean_text(text_chunk)
+        logging.info(f"Processing cleaned chunk: {cleaned_text_chunk}")
 
-        # 2. Call the model to extract knowledge
-        prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk)
+        # 3. Call the model to extract knowledge
+        prompt = EXTRACTION_PROMPT.format(text_chunk=cleaned_text_chunk)
         response = generation_model.generate_content(prompt)
         extracted_json = extract_json_from_response(response.text)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_json)}")
 
 
-        # 3. Store result in Redis and check for completion
+        # 4. Store result in Redis and check for completion
         results_key = f"batch:{batch_id}:results"
         counter_key = f"batch:{batch_id}:counter"
 
@@ -125,7 +143,7 @@ def worker(request):
         
         logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
 
-        # 4. If all chunks are processed, trigger consolidation
+        # 5. If all chunks are processed, trigger consolidation
         if current_count >= total_chunks:
             logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
             publisher = pubsub_v1.PublisherClient()
