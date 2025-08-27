@@ -5,4 +5,4 @@ google-cloud-pubsub>=2.13.0
 redis>=5.0.0
 google-cloud-secret-manager
 nltk
-google-generativeai>=0.4.0
+litellm
