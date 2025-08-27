@@ -8,8 +8,6 @@ from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
-import nltk
-import hashlib
 
 # --- Boilerplate and Configuration -- -
 
@@ -57,7 +55,7 @@ except Exception as e:
 EXTRACTION_PROMPT = """
 From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
 Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
-IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {type: "WORKS_FOR", properties: {startDate: "YYYY-MM-DD", endDate: "YYYY-MM-DD"}}).
+IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
 Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
 
@@ -68,28 +66,28 @@ TEXT:
 
 JSON:
 ```json
-{
+{{
   "entities": [
-    {
+    {{
       "id": "unique_id_1",
       "type": "EntityType",
-      "properties": {
+      "properties": {{
         "name": "Entity Name",
         "description": "Entity Description"
-      }
-    }
+      }}
+    }}
   ],
   "relationships": [
-    {
+    {{
       "source": "unique_id_1",
       "target": "unique_id_2",
       "type": "RELATIONSHIP_TYPE",
-      "properties": {
+      "properties": {{
         "startDate": "YYYY-MM-DD"
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 ```
 """
 
@@ -121,17 +119,17 @@ def extract_json_from_response(text):
         if "entities" not in extracted_data or "relationships" not in extracted_data:
             logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
             # Return a default valid structure to prevent downstream errors
-            return {"entities": [], "relationships": []}
+            return {{"entities": [], "relationships": []}}
             
         return extracted_data
         
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
         # Return a default valid structure to prevent downstream errors
-        return {"entities": [], "relationships": []}
+        return {{"entities": [], "relationships": []}}
     except Exception as e:
         logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
-        return {"entities": [], "relationships": []}
+        return {{"entities": [], "relationships": []}}
 
 def clean_text(text):
     """
@@ -167,7 +165,7 @@ def worker(request):
         text_chunk = request_json.get("chunk", {}).get("page_content")
         batch_id = request_json.get("batch_id")
         total_chunks = request_json.get("total_chunks")
-        chunk_number = request_json.get("chunk_number") # Assuming chunk_number is passed from orchestrator
+        chunk_number = request_json.get("chunk_number", 0) # Assuming chunk_number is passed from orchestrator
 
         if not all([text_chunk, batch_id, total_chunks]):
             logging.error("Missing 'chunk', 'batch_id', or 'total_chunks' in the request.")
