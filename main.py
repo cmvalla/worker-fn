@@ -4,6 +4,7 @@ import json
 import logging
 import redis
 import litellm
+import dspy
 from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
@@ -44,45 +45,22 @@ except redis.exceptions.ConnectionError as e:
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
+class KnowledgeGraphExtraction(dspy.Signature):
+    """Extracts entities and relationships from a text chunk to build a knowledge graph."""
+
+    text_chunk = dspy.InputField(desc="A chunk of text from a document.")
+    json_output = dspy.OutputField(desc="A single, valid JSON object containing two keys: 'entities' and 'relationships'.")
+
+# Configure DSPy to use LiteLLM with Gemini
+gemini = dspy.LiteLLM(model="gemini/gemini-pro")
+dspy.settings.configure(lm=gemini)
+
+# Create a DSPy program for knowledge extraction
+knowledge_extractor = dspy.Predict(KnowledgeGraphExtraction)
+
 # --- Prompt Template for Knowledge Extraction -- -
-EXTRACTION_PROMPT = """
-From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
-Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
-IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
-Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
 
-TEXT:
----
-{text_chunk}
----
-
-JSON:
-```json
-{{
-  "entities": [
-    {{
-      "id": "unique_id_1",
-      "type": "EntityType",
-      "properties": {{
-        "name": "Entity Name",
-        "description": "Entity Description"
-      }}
-    }}
-  ],
-  "relationships": [
-    {{
-      "source": "unique_id_1",
-      "target": "unique_id_2",
-      "type": "RELATIONSHIP_TYPE",
-      "properties": {{
-        "startDate": "YYYY-MM-DD"
-      }}
-    }}
-  ]
-}}
-```
-"""
 
 # --- Prompt Template for Summarization ---
 SUMMARY_PROMPT = """
@@ -189,13 +167,8 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
-        response = litellm.completion(
-            model="gemini/gemini-pro",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
-        extracted_data = extract_json_from_response(response.choices[0].message.content) # This contains entities and relationships
+        response = knowledge_extractor(text_chunk=text_chunk)
+        extracted_data = extract_json_from_response(response.json_output)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
