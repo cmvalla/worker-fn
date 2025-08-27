@@ -67,6 +67,30 @@ TEXT:
 ---
 
 JSON:
+```json
+{
+  "entities": [
+    {
+      "id": "unique_id_1",
+      "type": "EntityType",
+      "properties": {
+        "name": "Entity Name",
+        "description": "Entity Description"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "unique_id_1",
+      "target": "unique_id_2",
+      "type": "RELATIONSHIP_TYPE",
+      "properties": {
+        "startDate": "YYYY-MM-DD"
+      }
+    }
+  ]
+}
+```
 """
 
 # --- Prompt Template for Summarization ---
@@ -80,7 +104,10 @@ Summary:
 """
 
 def extract_json_from_response(text):
-    """Extracts a JSON object from the model's text response."""
+    """
+    Extracts a JSON object from the model's text response and performs basic validation.
+    Ensures the JSON contains "entities" and "relationships" keys.
+    """
     match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
     if match:
         json_str = match.group(2).strip()
@@ -88,10 +115,23 @@ def extract_json_from_response(text):
         json_str = text.strip()
 
     try:
-        return json.loads(json_str)
+        extracted_data = json.loads(json_str)
+        
+        # Basic schema validation
+        if "entities" not in extracted_data or "relationships" not in extracted_data:
+            logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
+            # Return a default valid structure to prevent downstream errors
+            return {"entities": [], "relationships": []}
+            
+        return extracted_data
+        
     except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse JSON: {e}. Raw text: '{json_str}'")
-        raise
+        logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
+        # Return a default valid structure to prevent downstream errors
+        return {"entities": [], "relationships": []}
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
+        return {"entities": [], "relationships": []}
 
 def clean_text(text):
     """
@@ -137,7 +177,7 @@ def worker(request):
         
         # 2. Generate summary for the chunk
         summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
-        summary_response = generation_model.generate_content(summary_prompt)
+        summary_response = generation_model.generate_content(summary_prompt, generation_config={"response_mime_type": "application/json"})
         chunk_summary = summary_response.text.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
 
@@ -155,7 +195,7 @@ def worker(request):
 
         # 4. Call the model to extract knowledge from the original text_chunk
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
-        response = generation_model.generate_content(prompt)
+        response = generation_model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
         extracted_data = extract_json_from_response(response.text) # This contains entities and relationships
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
