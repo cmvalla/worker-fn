@@ -159,6 +159,7 @@ def worker(request):
         extracted_data = extract_json_from_response(response.text) # This contains entities and relationships
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
+        logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
 
         # 5. Add the "Chunk" entity to the extracted entities
         extracted_data["entities"].append(chunk_entity)

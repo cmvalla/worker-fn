@@ -1,6 +1,6 @@
 steps:
 # Step 1: Build, Cache, and Push
-- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
+- name: 'europe-west1-docker.pkg.dev/spanner-demo-kid/my-docker-repo/gcp-terraform-build:latest'
   id: build-and-push
   entrypoint: bash
   args:
@@ -20,7 +20,7 @@ steps:
     docker push ${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME} --all-tags
 
 # Step 2A: Deploy the service
-- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
+- name: 'europe-west1-docker.pkg.dev/spanner-demo-kid/my-docker-repo/gcp-terraform-build:latest'
   id: deploy
   entrypoint: sh
   args:
@@ -35,7 +35,7 @@ steps:
 
 
 # Step 2B: Clean up old images (runs in parallel with deploy)
-- name: 'gcr.io/${_PROJECT_ID}/my-docker-repo/gcp-terraform-build:latest'
+- name: 'europe-west1-docker.pkg.dev/spanner-demo-kid/my-docker-repo/gcp-terraform-build:latest'
   id: cleanup-images
   entrypoint: bash
   args:
@@ -47,8 +47,8 @@ steps:
   waitFor: ['build-and-push']
 
 images:
-- '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:$BUILD_ID'
-- '${_LOCATION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY_ID}/${_IMAGE_NAME}:latest'
+- 'europe-west1-docker.pkg.dev/spanner-demo-kid/my-docker-repo/graphrag-fn-worker:$BUILD_ID'
+- 'europe-west1-docker.pkg.dev/spanner-demo-kid/my-docker-repo/graphrag-fn-worker:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
