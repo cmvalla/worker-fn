@@ -55,7 +55,9 @@ except Exception as e:
 
 # --- Prompt Template for Knowledge Extraction -- -
 EXTRACTION_PROMPT = """
-From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product), and a set of properties. The relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN).
+From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
+Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
+IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {type: "WORKS_FOR", properties: {startDate: "YYYY-MM-DD", endDate: "YYYY-MM-DD"}}).
 
 Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
 
@@ -65,6 +67,16 @@ TEXT:
 ---
 
 JSON:
+"""
+
+# --- Prompt Template for Summarization ---
+SUMMARY_PROMPT = """
+Summarize the following text in one concise sentence:
+---
+{text_chunk}
+---
+
+Summary:
 """
 
 def extract_json_from_response(text):
@@ -115,6 +127,7 @@ def worker(request):
         text_chunk = request_json.get("chunk", {}).get("page_content")
         batch_id = request_json.get("batch_id")
         total_chunks = request_json.get("total_chunks")
+        chunk_number = request_json.get("chunk_number") # Assuming chunk_number is passed from orchestrator
 
         if not all([text_chunk, batch_id, total_chunks]):
             logging.error("Missing 'chunk', 'batch_id', or 'total_chunks' in the request.")
@@ -122,38 +135,74 @@ def worker(request):
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
         
-        # 2. Split the chunk into sentences and process each
-        sentences = nltk.sent_tokenize(text_chunk)
-        
-        for sentence in sentences:
-            if not sentence.strip(): # Skip empty sentences
-                continue
+        # 2. Generate summary for the chunk
+        summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
+        summary_response = generation_model.generate_content(summary_prompt)
+        chunk_summary = summary_response.text.strip()
+        logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
 
-            cleaned_sentence = clean_text(sentence) # Clean each sentence
-            logging.info(f"Processing cleaned sentence: {cleaned_sentence}")
-            
-            # 3. Call the model to extract knowledge for each sentence
-            prompt = EXTRACTION_PROMPT.format(text_chunk=cleaned_sentence)
-            response = generation_model.generate_content(prompt)
-            extracted_json = extract_json_from_response(response.text)
-            logging.info(f"Successfully parsed JSON from model output for sentence in batch '{batch_id}'.")
-            logging.info(f"Extracted data for sentence: {json.dumps(extracted_json)}")
-            
-            # 4. Store result and sentence in Redis
-            # The key for Redis will be batch_id:sentence_hash to avoid duplicates
-            sentence_hash = hashlib.md5(sentence.encode('utf-8')).hexdigest()
-            redis_key = f"batch:{batch_id}:sentence:{sentence_hash}"
-            
-            # Store a dictionary containing the extracted JSON and the original sentence
-            redis_value = {
-                "sentence": sentence,
-                "extracted_data": extracted_json
+        # 3. Create the "Chunk" entity
+        chunk_entity_id = f"chunk-{batch_id}-{chunk_number}"
+        chunk_entity = {
+            "id": chunk_entity_id,
+            "type": "Chunk",
+            "properties": {
+                "original_text": text_chunk,
+                "summary": chunk_summary,
+                "chunk_number": chunk_number
             }
-            redis_client.set(redis_key, json.dumps(redis_value)) # Use SET instead of LPUSH for unique sentences
-            
-            logging.info(f"Processed sentence and stored in Redis for batch '{batch_id}'.")
+        }
+
+        # 4. Call the model to extract knowledge from the original text_chunk
+        prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
+        response = generation_model.generate_content(prompt)
+        extracted_data = extract_json_from_response(response.text) # This contains entities and relationships
+        logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
+        logging.info(f"Extracted data: {json.dumps(extracted_data)}")
+
+        # 5. Add the "Chunk" entity to the extracted entities
+        extracted_data["entities"].append(chunk_entity)
+
+        # 6. Create a community for the chunk and link it
+        chunk_community_id = f"community-{chunk_entity_id}"
+        chunk_community_entity = {
+            "id": chunk_community_id,
+            "type": "Community",
+            "properties": {
+                "name": f"Community for Chunk {chunk_number}",
+                "summary": chunk_summary # Community summary can be chunk summary
+            }
+        }
+        extracted_data["entities"].append(chunk_community_entity)
+
+        # Relationship: Chunk BELONGS_TO ChunkCommunity
+        extracted_data["relationships"].append({
+            "source": chunk_entity_id,
+            "target": chunk_community_id,
+            "type": "BELONGS_TO_COMMUNITY" # New relationship type
+        })
+
+        # 7. Create relationships from extracted entities to the "Chunk" entity
+        for entity in extracted_data["entities"]:
+            # Avoid linking the chunk entity to itself or the community entity to itself
+            if entity["id"] != chunk_entity_id and entity["id"] != chunk_community_id:
+                extracted_data["relationships"].append({
+                    "source": entity["id"],
+                    "target": chunk_entity_id,
+                    "type": "ARE_PART_OF_CHUNK" # New relationship type
+                })
+
+        # 8. Store the combined data in Redis
+        # The consolidator will need to be updated to handle this new structure
+        redis_value = {
+            "batch_id": batch_id,
+            "chunk_number": chunk_number,
+            "extracted_graph_data": extracted_data # Store the combined entities and relationships
+        }
+        redis_client.set(f"batch:{batch_id}:chunk:{chunk_number}", json.dumps(redis_value))
         
         # Increment the counter for the entire chunk, not per sentence
+        counter_key = f"batch:{batch_id}:counter" # Ensure counter_key is defined
         current_count = redis_client.incr(counter_key)
         logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
 
