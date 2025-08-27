@@ -29,7 +29,7 @@ steps:
     gcloud secrets versions access latest --secret="worker-tfvars" --project="${_PROJECT_ID}" > terraform/terraform.tfvars
     cd terraform
     terraform init -backend-config="prefix=cloud-spanner-demo/${_PROJECT_SUFFIX}/worker"
-    terraform apply -auto-approve -var="image_tag=$BUILD_ID" -var-file="terraform.tfvars"
+    terraform apply -auto-approve -var="image_tag=$BUILD_ID" -var="gemini_api_key=$(gcloud secrets versions access latest --secret='gemini-api-key' --project="${_PROJECT_ID}")"
   waitFor: ['build-and-push']
 
 
