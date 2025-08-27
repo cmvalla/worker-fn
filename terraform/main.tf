@@ -89,6 +89,10 @@ resource "google_cloud_run_v2_service" "worker" {
         name = "CONSOLIDATION_TOPIC"
         value = var.consolidation_topic
       }
+      env {
+        name = "GEMINI_API_KEY"
+        value = var.gemini_api_key
+      }
     }
   }
 }

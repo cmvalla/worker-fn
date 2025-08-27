@@ -72,3 +72,9 @@ variable "worker_sa_key_secret_id" {
   type        = string
   description = "The full resource name of the Secret Manager secret containing the worker service account key."
 }
+
+variable "gemini_api_key" {
+  type        = string
+  description = "The API key for Gemini."
+  sensitive   = true
+}
