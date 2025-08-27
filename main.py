@@ -3,7 +3,7 @@ import re
 import json
 import logging
 import redis
-import google.generativeai as genai
+import litellm
 from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
@@ -30,16 +30,9 @@ if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
     logging.critical("FATAL: Missing one or more required environment variables: REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC")
 
 # --- Global Clients -- -
-generation_model = None
 redis_client = None
 
-try:
-    logging.info("Initializing Generative AI client...")
-    genai.configure(transport="rest")
-    generation_model = genai.GenerativeModel("gemini-2.5-flash")
-    logging.info("Generative AI client initialized successfully.")
-except Exception as e:
-    logging.critical(f"FATAL: Failed to initialize Generative AI client: {e}", exc_info=True)
+
 
 try:
     logging.info(f"Initializing Redis client for host '{REDIS_HOST}'...")
@@ -151,8 +144,8 @@ def worker(request):
     Processes a text chunk, extracts knowledge, stores it in Redis,
     and triggers the final consolidation if it's the last chunk.
     """
-    if not generation_model or not redis_client:
-        logging.critical("FATAL: A required client (GenAI or Redis) is not initialized.")
+    if not redis_client:
+        logging.critical("FATAL: Redis client is not initialized.")
         return "ERROR: Client initialization failed", 500
 
     try:
@@ -175,8 +168,12 @@ def worker(request):
         
         # 2. Generate summary for the chunk
         summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
-        summary_response = generation_model.generate_content(summary_prompt, generation_config={"response_mime_type": "application/json"})
-        chunk_summary = summary_response.text.strip()
+        summary_response = litellm.completion(
+            model="gemini/gemini-pro",
+            messages=[{"role": "user", "content": summary_prompt}],
+            response_format={"type": "json_object"},
+        )
+        chunk_summary = summary_response.choices[0].message.content.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
 
         # 3. Create the "Chunk" entity
@@ -193,8 +190,12 @@ def worker(request):
 
         # 4. Call the model to extract knowledge from the original text_chunk
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
-        response = generation_model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        extracted_data = extract_json_from_response(response.text) # This contains entities and relationships
+        response = litellm.completion(
+            model="gemini/gemini-pro",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+        extracted_data = extract_json_from_response(response.choices[0].message.content) # This contains entities and relationships
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
