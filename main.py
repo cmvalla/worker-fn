@@ -3,12 +3,13 @@ import re
 import json
 import logging
 import redis
-import litellm
-import dspy
+import google.generativeai as genai
 from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
+
+import google.generativeai as genai
 
 # --- Boilerplate and Configuration -- -
 
@@ -32,6 +33,15 @@ if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
 
 # --- Global Clients -- -
 redis_client = None
+generation_model = None
+
+try:
+    logging.info("Initializing Generative AI client...")
+    genai.configure(transport="rest")
+    generation_model = genai.GenerativeModel("gemini-2.5-flash")
+    logging.info("Generative AI client initialized successfully.")
+except Exception as e:
+    logging.critical(f"FATAL: Failed to initialize Generative AI client: {e}", exc_info=True)
 
 
 
@@ -45,22 +55,51 @@ except redis.exceptions.ConnectionError as e:
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
-class KnowledgeGraphExtraction(dspy.Signature):
-    """Extracts entities and relationships from a text chunk to build a knowledge graph."""
-
-    text_chunk = dspy.InputField(desc="A chunk of text from a document.")
-    json_output = dspy.OutputField(desc="A single, valid JSON object containing two keys: 'entities' and 'relationships'.")
-
-# Configure DSPy to use LiteLLM with Gemini
-gemini = dspy.LiteLLM(model="gemini/gemini-pro")
-dspy.settings.configure(lm=gemini)
-
-# Create a DSPy program for knowledge extraction
-knowledge_extractor = dspy.Predict(KnowledgeGraphExtraction)
+generation_model = None
 
 # --- Prompt Template for Knowledge Extraction -- -
 
 
+
+# --- Prompt Template for Knowledge Extraction -- -
+EXTRACTION_PROMPT = """
+From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
+Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
+IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
+
+Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
+
+TEXT:
+---
+{text_chunk}
+---
+
+JSON:
+```json
+{{
+  "entities": [
+    {{
+      "id": "unique_id_1",
+      "type": "EntityType",
+      "properties": {{
+        "name": "Entity Name",
+        "description": "Entity Description"
+      }}
+    }}
+  ],
+  "relationships": [
+    {{
+      "source": "unique_id_1",
+      "target": "unique_id_2",
+      "type": "RELATIONSHIP_TYPE",
+      "properties": {{
+        "startDate": "YYYY-MM-DD"
+      }}
+    }}
+  ]
+}}
+```
+"""
 
 # --- Prompt Template for Summarization ---
 SUMMARY_PROMPT = """
@@ -122,8 +161,8 @@ def worker(request):
     Processes a text chunk, extracts knowledge, stores it in Redis,
     and triggers the final consolidation if it's the last chunk.
     """
-    if not redis_client:
-        logging.critical("FATAL: Redis client is not initialized.")
+    if not generation_model or not redis_client:
+        logging.critical("FATAL: A required client (GenAI or Redis) is not initialized.")
         return "ERROR: Client initialization failed", 500
 
     try:
@@ -146,12 +185,8 @@ def worker(request):
         
         # 2. Generate summary for the chunk
         summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
-        summary_response = litellm.completion(
-            model="gemini/gemini-pro",
-            messages=[{"role": "user", "content": summary_prompt}],
-            response_format={"type": "json_object"},
-        )
-        chunk_summary = summary_response.choices[0].message.content.strip()
+        summary_response = generation_model.generate_content(summary_prompt, generation_config={"response_mime_type": "application/json"})
+        chunk_summary = summary_response.text.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
 
         # 3. Create the "Chunk" entity
@@ -167,8 +202,9 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        response = knowledge_extractor(text_chunk=text_chunk)
-        extracted_data = extract_json_from_response(response.json_output)
+        prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
+        response = generation_model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        extracted_data = extract_json_from_response(response.text)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
