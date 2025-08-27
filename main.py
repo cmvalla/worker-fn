@@ -238,7 +238,8 @@ def worker(request):
             "chunk_number": chunk_number,
             "extracted_graph_data": extracted_data # Store the combined entities and relationships
         }
-        redis_client.set(f"batch:{batch_id}:chunk:{chunk_number}", json.dumps(redis_value))
+        results_key = f"batch:{batch_id}:results"
+        redis_client.rpush(results_key, json.dumps(redis_value))
         
         # Increment the counter for the entire chunk, not per sentence
         counter_key = f"batch:{batch_id}:counter" # Ensure counter_key is defined
