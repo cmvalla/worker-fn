@@ -8,6 +8,14 @@ from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
+import nltk
+import hashlib
+
+# Download the 'punkt' tokenizer for sentence splitting
+try:
+    nltk.data.find('tokenizers/punkt')
+except nltk.downloader.DownloadError:
+    nltk.download('punkt')
 
 # --- Boilerplate and Configuration -- -
 
@@ -120,6 +128,9 @@ def worker(request):
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
         
+        # Define counter_key for Redis
+        counter_key = f"batch:{batch_id}:counter"
+
         # 2. Split the chunk into sentences and process each
         sentences = nltk.sent_tokenize(text_chunk)
         
@@ -162,7 +173,7 @@ def worker(request):
             topic_path = publisher.topic_path(GCP_PROJECT, CONSOLIDATION_TOPIC)
             
             message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
-            future = publisher.publish(topic_path, data=message_data)
+            future = publisher.publish(.venv/topic_path, data=message_data)
             message_id = future.result()
             
             logging.info(f"Successfully published consolidation trigger message {message_id} to topic {topic_path}.")
