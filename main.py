@@ -53,7 +53,7 @@ except Exception as e:
 llm = ChatVertexAI(
     project=GCP_PROJECT,
     location=LOCATION,
-    model_name="gemini-1.5-flash-001",
+    model_name="gemini-2.5-flash",
 )
 json_parser = JsonOutputParser()
 
