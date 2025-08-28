@@ -39,6 +39,9 @@ if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
 # --- Global Clients -- -
 redis_client = None
 
+# Configure DSPy once when the module is loaded
+lm = VertexAI(model="gemini-2.5-flash", project=GCP_PROJECT, location=LOCATION)
+dspy.settings.configure(lm=lm)
 
 
 
