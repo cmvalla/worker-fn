@@ -182,7 +182,12 @@ def worker(request):
 
         # Call the DSPy program
         response = extractor(text_chunk=text_chunk)
-        extracted_data = extract_json_from_response(response.json_response)
+        
+        if response.json_response is None:
+            logging.error(f"DSPy model returned None for json_response. Input text_chunk: {text_chunk}")
+            extracted_data = {"entities": [], "relationships": []}
+        else:
+            extracted_data = extract_json_from_response(response.json_response)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
