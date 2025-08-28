@@ -5,7 +5,6 @@ import logging
 import redis
 import litellm
 import dspy
-from dspy.google import VertexAI
 from dspy.predict import Predict
 from google.cloud import pubsub_v1
 import functions_framework
@@ -166,7 +165,11 @@ def worker(request):
 
         # 4. Call the model to extract knowledge from the original text_chunk
         # Configure DSPy
-        lm = VertexAI(model="gemini-2.5-flash", project=GCP_PROJECT, location=LOCATION)
+        lm = dspy.LM(
+            "vertex_ai/gemini-2.5-flash",
+            vertex_project=GCP_PROJECT,
+            vertex_location=LOCATION,
+        )
         dspy.settings.configure(lm=lm)
 
         class KnowledgeExtraction(dspy.Signature):
