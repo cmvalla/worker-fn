@@ -175,19 +175,24 @@ def worker(request):
         class KnowledgeExtraction(dspy.Signature):
             """Extracts entities and relationships from a given text."""
             text_chunk = dspy.InputField(desc="A chunk of text to be processed.")
-            json_response = dspy.OutputField(desc="A single, valid JSON object containing two keys: \"entities\" and \"relationships\".")
+            json_response = dspy.OutputField(desc="A JSON string representing a list of entities and relationships, like: { \"entities\": [ { \"id\": \"unique_id_1\", \"type\": \"EntityType\", \"properties\": { \"name\": \"Entity Name\" } } ], \"relationships\": [ { \"source\": \"unique_id_1\", \"target\": \"unique_id_2\", \"type\": \"RELATIONSHIP_TYPE\" } ] }")
 
         # Define the DSPy program
         extractor = Predict(KnowledgeExtraction)
 
-        # Call the DSPy program
-        response = extractor(text_chunk=text_chunk)
+        # Call the DSPy program with retries
+        max_retries = 3
+        extracted_data = {"entities": [], "relationships": []} # Default empty structure
+        for attempt in range(max_retries):
+            response = extractor(text_chunk=text_chunk)
+            if response.json_response is not None:
+                extracted_data = extract_json_from_response(response.json_response)
+                break
+            else:
+                logging.warning(f"DSPy model returned None for json_response on attempt {attempt + 1}/{max_retries}. Retrying...")
         
-        if response.json_response is None:
-            logging.error(f"DSPy model returned None for json_response. Input text_chunk: {text_chunk}")
-            extracted_data = {"entities": [], "relationships": []}
-        else:
-            extracted_data = extract_json_from_response(response.json_response)
+        if extracted_data == {"entities": [], "relationships": []}:
+            logging.error(f"DSPy model failed to return valid JSON after {max_retries} attempts for text_chunk: {text_chunk}")
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
