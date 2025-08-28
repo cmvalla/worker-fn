@@ -26,6 +26,7 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 # Retrieve Redis password from Secret Manager
 REDIS_PASSWORD = secretmanager.SecretManagerServiceClient().access_secret_version(request={"name": f"projects/{GCP_PROJECT}/secrets/redis-password/versions/latest"}).payload.data.decode("UTF-8")
 CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")
 if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):

@@ -8,6 +8,11 @@ data "google_secret_manager_secret_version" "worker_sa_key" {
   secret  = var.worker_sa_key_secret_id
 }
 
+data "google_secret_manager_secret_version" "gemini_api_key" {
+  project = var.project_id
+  secret  = "gemini-api-key"
+}
+
 resource "google_cloud_run_v2_service" "worker" {
   name     = "worker-fn"
   location = var.location
@@ -91,7 +96,7 @@ resource "google_cloud_run_v2_service" "worker" {
       }
       env {
         name = "GEMINI_API_KEY"
-        value = var.gemini_api_key
+        value = data.google_secret_manager_secret_version.gemini_api_key.secret_data
       }
     }
   }

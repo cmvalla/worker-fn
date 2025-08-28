@@ -6,3 +6,4 @@ redis>=5.0.0
 google-cloud-secret-manager
 nltk
 litellm
+dspy-ai
