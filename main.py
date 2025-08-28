@@ -4,6 +4,8 @@ import json
 import logging
 import redis
 import litellm
+import dspy
+from dspy.predict import Predict
 from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
@@ -53,49 +55,7 @@ except Exception as e:
 
 generation_model = None
 
-# --- Prompt Template for Knowledge Extraction -- -
 
-
-
-# --- Prompt Template for Knowledge Extraction -- -
-EXTRACTION_PROMPT = """
-From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
-Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
-IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
-
-Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
-
-TEXT:
----
-{text_chunk}
----
-
-JSON:
-```json
-{{
-  "entities": [
-    {{
-      "id": "unique_id_1",
-      "type": "EntityType",
-      "properties": {{
-        "name": "Entity Name",
-        "description": "Entity Description"
-      }}
-    }}
-  ],
-  "relationships": [
-    {{
-      "source": "unique_id_1",
-      "target": "unique_id_2",
-      "type": "RELATIONSHIP_TYPE",
-      "properties": {{
-        "startDate": "YYYY-MM-DD"
-      }}
-    }}
-  ]
-}}
-```
-"""
 
 # --- Prompt Template for Summarization ---
 SUMMARY_PROMPT = """
@@ -204,15 +164,21 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
-        response = litellm.completion(
-            model="vertex_ai/gemini-2.5-flash",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            vertex_project=GCP_PROJECT,
-            vertex_location=LOCATION
-        )
-        extracted_data = extract_json_from_response(response.choices[0].message.content)
+        # Configure DSPy
+        lm = dspy.Google(model="gemini-2.5-flash", project=GCP_PROJECT, location=LOCATION)
+        dspy.settings.configure(lm=lm)
+
+        class KnowledgeExtraction(dspy.Signature):
+            """Extracts entities and relationships from a given text."""
+            text_chunk = dspy.InputField(desc="A chunk of text to be processed.")
+            json_response = dspy.OutputField(desc="A single, valid JSON object containing two keys: \"entities\" and \"relationships\".")
+
+        # Define the DSPy program
+        extractor = Predict(KnowledgeExtraction)
+
+        # Call the DSPy program
+        response = extractor(text_chunk=text_chunk)
+        extracted_data = extract_json_from_response(response.json_response)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
