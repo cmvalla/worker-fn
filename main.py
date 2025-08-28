@@ -62,7 +62,7 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
 From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
 For each entity, ensure its 'name' property retains the original language from the text. All other properties, such as 'description', 'value', 'role', etc., must be translated into English.
-Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). For relationships, the 'type' property must also retain the original language from the text.
+Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). For relationships, the 'type' property must also retain the original language from the text. Additionally, include a 'confidence' score (a float between 0.0 and 1.0) in the properties for each relationship, indicating the model's certainty in the extraction.
 IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
 Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
@@ -182,6 +182,15 @@ def worker(request):
         extraction_chain = EXTRACTION_PROMPT | llm
         llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
         extracted_data = extract_json_from_response(llm_response.content)
+        # Add weight to LLM extracted relationships based on confidence, or default to 1
+        for rel in extracted_data.get("relationships", []):
+            if "properties" not in rel:
+                rel["properties"] = {}
+            confidence = rel["properties"].get("confidence")
+            if isinstance(confidence, (int, float)):
+                rel["properties"]["weight"] = float(confidence)
+            else:
+                rel["properties"]["weight"] = 1.0 # Default weight if confidence is not provided or invalid
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
@@ -205,7 +214,8 @@ def worker(request):
         extracted_data["relationships"].append({
             "source": chunk_entity_id,
             "target": chunk_community_id,
-            "type": "BELONGS_TO_COMMUNITY" # New relationship type
+            "type": "BELONGS_TO_COMMUNITY", # New relationship type
+            "properties": {"weight": 0.5} # Add weight
         })
 
         # 7. Create relationships from extracted entities to the "Chunk" entity
@@ -215,7 +225,8 @@ def worker(request):
                 extracted_data["relationships"].append({
                     "source": entity["id"],
                     "target": chunk_entity_id,
-                    "type": "ARE_PART_OF_CHUNK" # New relationship type
+                    "type": "ARE_PART_OF_CHUNK", # New relationship type
+                    "properties": {"weight": 1} # Add weight
                 })
 
         # 8. Store the combined data in Redis
