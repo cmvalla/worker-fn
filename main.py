@@ -182,7 +182,7 @@ def worker(request):
         # 2. Generate summary for the chunk
         summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
         summary_response = litellm.completion(
-            model="vertex_ai/gemini-pro",
+            model="vertex_ai/gemini-2.5-flash",
             messages=[{"role": "user", "content": summary_prompt}],
             response_format={"type": "json_object"},
             vertex_project=GCP_PROJECT,
@@ -206,7 +206,7 @@ def worker(request):
         # 4. Call the model to extract knowledge from the original text_chunk
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
         response = litellm.completion(
-            model="vertex_ai/gemini-pro",
+            model="vertex_ai/gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             vertex_project=GCP_PROJECT,
