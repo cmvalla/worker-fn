@@ -98,23 +98,24 @@ def extract_json_from_response(text):
         json_str = text.strip()
 
     try:
+        logging.info(f"Attempting to parse JSON: {json_str}") # Added logging
         extracted_data = json.loads(json_str)
         
         # Basic schema validation
         if "entities" not in extracted_data or "relationships" not in extracted_data:
             logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
             # Return a default valid structure to prevent downstream errors
-            return {{"entities": [], "relationships": []}}
+            return {"entities": [], "relationships": []}
             
         return extracted_data
         
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
         # Return a default valid structure to prevent downstream errors
-        return {{"entities": [], "relationships": []}}
+        return {"entities": [], "relationships": []}
     except Exception as e:
         logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
-        return {{"entities": [], "relationships": []}}
+        return {"entities": [], "relationships": []}
 
 def clean_text(text):
     '''
