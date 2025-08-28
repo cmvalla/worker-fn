@@ -26,7 +26,9 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 # Retrieve Redis password from Secret Manager
 REDIS_PASSWORD = secretmanager.SecretManagerServiceClient().access_secret_version(request={"name": f"projects/{GCP_PROJECT}/secrets/redis-password/versions/latest"}).payload.data.decode("UTF-8")
 CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# The worker function will use the service account credentials for authentication
+# The GOOGLE_APPLICATION_CREDENTIALS environment variable should be set to the path of the service account key file
+
 
 logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")
 if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
@@ -180,9 +182,11 @@ def worker(request):
         # 2. Generate summary for the chunk
         summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
         summary_response = litellm.completion(
-            model="gemini/gemini-pro",
+            model="vertex_ai/gemini-pro",
             messages=[{"role": "user", "content": summary_prompt}],
             response_format={"type": "json_object"},
+            vertex_project=GCP_PROJECT,
+            vertex_location=LOCATION
         )
         chunk_summary = summary_response.choices[0].message.content.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
@@ -202,9 +206,11 @@ def worker(request):
         # 4. Call the model to extract knowledge from the original text_chunk
         prompt = EXTRACTION_PROMPT.format(text_chunk=text_chunk) # Use original text_chunk for extraction
         response = litellm.completion(
-            model="gemini/gemini-pro",
+            model="vertex_ai/gemini-pro",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
+            vertex_project=GCP_PROJECT,
+            vertex_location=LOCATION
         )
         extracted_data = extract_json_from_response(response.choices[0].message.content)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
