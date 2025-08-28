@@ -5,5 +5,5 @@ google-cloud-pubsub>=2.13.0
 redis>=5.0.0
 google-cloud-secret-manager
 nltk
-litellm
-dspy-ai[google-vertex-ai]
+langchain-google-vertexai
+langchain

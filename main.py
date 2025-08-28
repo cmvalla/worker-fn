@@ -3,9 +3,9 @@ import re
 import json
 import logging
 import redis
-import litellm
-import dspy
-from dspy.predict import Predict
+from langchain_google_vertexai.chat_models import ChatVertexAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
@@ -39,13 +39,6 @@ if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
 # --- Global Clients -- -
 redis_client = None
 
-# Configure DSPy once when the module is loaded
-lm = VertexAI(model="gemini-2.5-flash", project=GCP_PROJECT, location=LOCATION)
-dspy.settings.configure(lm=lm)
-
-
-
-
 try:
     logging.info(f"Initializing Redis client for host '{REDIS_HOST}'...")
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, socket_connect_timeout=10, ssl=False)
@@ -56,25 +49,48 @@ except redis.exceptions.ConnectionError as e:
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
-generation_model = None
+# --- Langchain Model Initialization ---
+llm = ChatVertexAI(
+    project=GCP_PROJECT,
+    location=LOCATION,
+    model_name="gemini-1.5-flash-001",
+)
+json_parser = JsonOutputParser()
 
+# --- Prompt Templates for Langchain ---
+EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """
+From the text below, extract entities and their relationships. The entities should have a unique ID, a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
+Relationships should connect two entities by their IDs and have a type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.).
+IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
+Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
+"""),
+    ("user", """TEXT:
+---
+{text_chunk}
+---
 
-# --- Prompt Template for Summarization ---
-SUMMARY_PROMPT = """
-Summarize the following text in one concise sentence:
+JSON:
+""")
+])
+
+SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", "Summarize the following text in one concise sentence:"),
+    ("user", """TEXT:
 ---
 {text_chunk}
 ---
 
 Summary:
-"""
+""")
+])
 
 def extract_json_from_response(text):
-    """
+    '''
     Extracts a JSON object from the model's text response and performs basic validation.
     Ensures the JSON contains "entities" and "relationships" keys.
-    """
+    '''
     match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
     if match:
         json_str = match.group(2).strip()
@@ -88,23 +104,23 @@ def extract_json_from_response(text):
         if "entities" not in extracted_data or "relationships" not in extracted_data:
             logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
             # Return a default valid structure to prevent downstream errors
-            return {"entities": [], "relationships": []}
+            return {{"entities": [], "relationships": []}}
             
         return extracted_data
         
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
         # Return a default valid structure to prevent downstream errors
-        return {"entities": [], "relationships": []}
+        return {{"entities": [], "relationships": []}}
     except Exception as e:
         logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
-        return {"entities": [], "relationships": []}
+        return {{"entities": [], "relationships": []}}
 
 def clean_text(text):
-    """
+    '''
     Cleans the input text by removing HTML tags, special characters,
     and converting it to lowercase.
-    """
+    '''
     # Remove HTML tags
     text = re.sub(r'<[^>]+>', '', text)
     
@@ -116,10 +132,10 @@ def clean_text(text):
 
 @functions_framework.http
 def worker(request):
-    """
+    '''
     Processes a text chunk, extracts knowledge, stores it in Redis,
     and triggers the final consolidation if it's the last chunk.
-    """
+    '''
     if not redis_client:
         logging.critical("FATAL: Redis client is not initialized.")
         return "ERROR: Client initialization failed", 500
@@ -143,15 +159,9 @@ def worker(request):
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
         
         # 2. Generate summary for the chunk
-        summary_prompt = SUMMARY_PROMPT.format(text_chunk=text_chunk)
-        summary_response = litellm.completion(
-            model="vertex_ai/gemini-2.5-flash",
-            messages=[{"role": "user", "content": summary_prompt}],
-            response_format={"type": "json_object"},
-            vertex_project=GCP_PROJECT,
-            vertex_location=LOCATION
-        )
-        chunk_summary = summary_response.choices[0].message.content.strip()
+        summary_chain = SUMMARY_PROMPT | llm
+        summary_response = summary_chain.invoke({"text_chunk": text_chunk})
+        chunk_summary = summary_response.content.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
 
         # 3. Create the "Chunk" entity
@@ -167,35 +177,9 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        # Configure DSPy
-        lm = dspy.LM(
-            "vertex_ai/gemini-2.5-flash",
-            vertex_project=GCP_PROJECT,
-            vertex_location=LOCATION,
-        )
-        dspy.settings.configure(lm=lm)
-
-        class KnowledgeExtraction(dspy.Signature):
-            """Extracts entities and relationships from a given text."""
-            text_chunk = dspy.InputField(desc="A chunk of text to be processed.")
-            json_response = dspy.OutputField(desc="A JSON string representing a list of entities and relationships, like: { \"entities\": [ { \"id\": \"unique_id_1\", \"type\": \"EntityType\", \"properties\": { \"name\": \"Entity Name\" } } ], \"relationships\": [ { \"source\": \"unique_id_1\", \"target\": \"unique_id_2\", \"type\": \"RELATIONSHIP_TYPE\" } ] }")
-
-        # Define the DSPy program
-        extractor = Predict(KnowledgeExtraction)
-
-        # Call the DSPy program with retries
-        max_retries = 3
-        extracted_data = {"entities": [], "relationships": []} # Default empty structure
-        for attempt in range(max_retries):
-            response = extractor(text_chunk=text_chunk)
-            if response.json_response is not None:
-                extracted_data = extract_json_from_response(response.json_response)
-                break
-            else:
-                logging.warning(f"DSPy model returned None for json_response on attempt {attempt + 1}/{max_retries}. Retrying...")
-        
-        if extracted_data == {"entities": [], "relationships": []}:
-            logging.error(f"DSPy model failed to return valid JSON after {max_retries} attempts for text_chunk: {text_chunk}")
+        extraction_chain = EXTRACTION_PROMPT | llm
+        llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
+        extracted_data = extract_json_from_response(llm_response.content)
         logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
         logging.info(f"Extracted data: {json.dumps(extracted_data)}")
         logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
