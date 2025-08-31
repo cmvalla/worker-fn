@@ -54,6 +54,7 @@ llm = ChatVertexAI(
     project=GCP_PROJECT,
     location=LOCATION,
     model_name="gemini-2.5-flash",
+    response_mime_type="application/json",
 )
 json_parser = JsonOutputParser()
 
@@ -92,27 +93,39 @@ def extract_json_from_response(text):
     Extracts a JSON object from the model's text response and performs basic validation.
     Ensures the JSON contains "entities" and "relationships" keys.
     '''
-    match = re.search(r"```(json)?(.*)```", text, re.DOTALL | re.IGNORECASE)
+    # Try to find a JSON block enclosed in ```json ... ```
+    match = re.search(r"```json\s*({.*})```", text, re.DOTALL | re.IGNORECASE)
     if match:
-        json_str = match.group(2).strip()
+        json_str = match.group(1).strip()
     else:
-        json_str = text.strip()
+        # If not found, try to find a JSON block enclosed in ``` ... ``` (without 'json')
+        match = re.search(r"```\s*({.*})```", text, re.DOTALL | re.IGNORECASE)
+        if match:
+            json_str = match.group(1).strip()
+        else:
+            # Fallback: assume the entire text is JSON, but strip common wrappers
+            json_str = text.strip()
+            # Remove common prefixes/suffixes that are not valid JSON
+            if json_str.startswith("json"):
+                json_str = json_str[4:].strip()
+            if json_str.startswith("```"):
+                json_str = json_str[3:].strip()
+            if json_str.endswith("```"):
+                json_str = json_str[:-3].strip()
 
     try:
-        logging.info(f"Attempting to parse JSON: {json_str}") # Added logging
+        logging.info(f"Attempting to parse JSON: {json_str}")
         extracted_data = json.loads(json_str)
         
         # Basic schema validation
         if "entities" not in extracted_data or "relationships" not in extracted_data:
             logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
-            # Return a default valid structure to prevent downstream errors
             return {"entities": [], "relationships": []}
             
         return extracted_data
         
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
-        # Return a default valid structure to prevent downstream errors
         return {"entities": [], "relationships": []}
     except Exception as e:
         logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
