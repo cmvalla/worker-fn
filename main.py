@@ -121,6 +121,9 @@ def extract_json_from_response(text):
             if json_str.endswith("```"):
                 json_str = json_str[:-3].strip()
 
+    # Remove "insensitive:true" from the string
+    json_str = json_str.replace("insensitive:true", "")
+
     max_retries = 5
     base_backoff = 1  # 1 second
     max_backoff = 300  # 5 minutes
