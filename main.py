@@ -2,6 +2,8 @@ import os
 import re
 import json
 import logging
+import time
+import random
 import redis
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -50,11 +52,16 @@ except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
 # --- Langchain Model Initialization ---
-llm = ChatVertexAI(
+llm_json = ChatVertexAI(
     project=GCP_PROJECT,
     location=LOCATION,
     model_name="gemini-2.5-flash",
     response_mime_type="application/json",
+)
+llm_text = ChatVertexAI(
+    project=GCP_PROJECT,
+    location=LOCATION,
+    model_name="gemini-2.5-flash",
 )
 json_parser = JsonOutputParser()
 
@@ -92,6 +99,7 @@ def extract_json_from_response(text):
     '''
     Extracts a JSON object from the model's text response and performs basic validation.
     Ensures the JSON contains "entities" and "relationships" keys.
+    Implements a retry mechanism with exponential backoff for JSON parsing.
     '''
     # Try to find a JSON block enclosed in ```json ... ```
     match = re.search(r"```json\s*({.*})```", text, re.DOTALL | re.IGNORECASE)
@@ -113,23 +121,39 @@ def extract_json_from_response(text):
             if json_str.endswith("```"):
                 json_str = json_str[:-3].strip()
 
-    try:
-        logging.info(f"Attempting to parse JSON: {json_str}")
-        extracted_data = json.loads(json_str)
-        
-        # Basic schema validation
-        if "entities" not in extracted_data or "relationships" not in extracted_data:
-            logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
+    max_retries = 5
+    base_backoff = 1  # 1 second
+    max_backoff = 300  # 5 minutes
+
+    for attempt in range(max_retries):
+        try:
+            logging.info(f"Attempting to parse JSON (attempt {attempt + 1}/{max_retries}): {json_str}")
+            extracted_data = json.loads(json_str)
+
+            # Basic schema validation
+            if "entities" not in extracted_data or "relationships" not in extracted_data:
+                logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
+                # No retry for schema validation errors, as it's a content issue
+                return {"entities": [], "relationships": []}
+
+            return extracted_data
+
+        except json.JSONDecodeError as e:
+            logging.warning(f"Failed to parse JSON on attempt {attempt + 1}/{max_retries}: {e}. Raw text: '{json_str}'")
+            if attempt < max_retries - 1:
+                backoff_time = min(base_backoff * (2 ** attempt) + random.uniform(0, 1), max_backoff)
+                logging.info(f"Retrying in {backoff_time:.2f} seconds...")
+                time.sleep(backoff_time)
+            else:
+                logging.error(f"Failed to parse JSON after {max_retries} attempts. Raw text: '{json_str}'")
+                return {"entities": [], "relationships": []}
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
+            # No retry for other unexpected errors
             return {"entities": [], "relationships": []}
-            
-        return extracted_data
-        
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse JSON from model output: {e}. Raw text: '{json_str}'")
-        return {"entities": [], "relationships": []}
-    except Exception as e:
-        logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
-        return {"entities": [], "relationships": []}
+
+    # This part should not be reached if the loop is exited correctly
+    return {"entities": [], "relationships": []}
 
 def clean_text(text):
     '''
@@ -138,7 +162,7 @@ def clean_text(text):
     '''
     # Remove HTML tags
     text = re.sub(r'<[^>]+>', '', text)
-    
+
     # Convert to lowercase
     text = text.lower()
     # Remove extra whitespace
@@ -173,9 +197,9 @@ def worker(request):
             return "Bad Request: Missing required fields", 400
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
-        
+
         # 2. Generate summary for the chunk
-        summary_chain = SUMMARY_PROMPT | llm
+        summary_chain = SUMMARY_PROMPT | llm_text
         summary_response = summary_chain.invoke({"text_chunk": text_chunk})
         chunk_summary = summary_response.content.strip()
         logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
@@ -193,7 +217,7 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        extraction_chain = EXTRACTION_PROMPT | llm
+        extraction_chain = EXTRACTION_PROMPT | llm_json
         llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
         extracted_data = extract_json_from_response(llm_response.content)
         # Add weight to LLM extracted relationships based on confidence, or default to 1
@@ -252,7 +276,7 @@ def worker(request):
         }
         results_key = f"batch:{batch_id}:results"
         redis_client.rpush(results_key, json.dumps(redis_value))
-        
+
         # Increment the counter for the entire chunk, not per sentence
         counter_key = f"batch:{batch_id}:counter" # Ensure counter_key is defined
         current_count = redis_client.incr(counter_key)
@@ -263,11 +287,11 @@ def worker(request):
             logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
             publisher = pubsub_v1.PublisherClient()
             topic_path = publisher.topic_path(GCP_PROJECT, CONSOLIDATION_TOPIC)
-            
+
             message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
             future = publisher.publish(topic_path, data=message_data)
             message_id = future.result()
-            
+
             logging.info(f"Successfully published consolidation trigger message {message_id} to topic {topic_path}.")
 
         return "OK", 200
