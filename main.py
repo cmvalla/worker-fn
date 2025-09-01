@@ -99,7 +99,6 @@ def extract_json_from_response(text):
     '''
     Extracts a JSON object from the model's text response and performs basic validation.
     Ensures the JSON contains "entities" and "relationships" keys.
-    Implements a retry mechanism with exponential backoff for JSON parsing.
     '''
     # Try to find a JSON block enclosed in ```json ... ```
     match = re.search(r"```json\s*({.*})```", text, re.DOTALL | re.IGNORECASE)
@@ -124,39 +123,32 @@ def extract_json_from_response(text):
     # Remove "insensitive:true" from the string
     json_str = json_str.replace("insensitive:true", "")
 
-    max_retries = 5
-    base_backoff = 1  # 1 second
-    max_backoff = 300  # 5 minutes
+    extracted_data = json.loads(json_str)
 
+    # Basic schema validation
+    if "entities" not in extracted_data or "relationships" not in extracted_data:
+        logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
+        raise ValueError("Invalid JSON schema")
+
+    return extracted_data
+
+def invoke_llm_with_retry(text_chunk, max_retries=5):
+    extraction_chain = EXTRACTION_PROMPT | llm_json
+    
     for attempt in range(max_retries):
         try:
-            logging.info(f"Attempting to parse JSON (attempt {attempt + 1}/{max_retries}): {json_str}")
-            extracted_data = json.loads(json_str)
-
-            # Basic schema validation
-            if "entities" not in extracted_data or "relationships" not in extracted_data:
-                logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
-                # No retry for schema validation errors, as it's a content issue
-                return {"entities": [], "relationships": []}
-
-            return extracted_data
-
-        except json.JSONDecodeError as e:
-            logging.warning(f"Failed to parse JSON on attempt {attempt + 1}/{max_retries}: {e}. Raw text: '{json_str}'")
+            logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
+            llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
+            return extract_json_from_response(llm_response.content)
+        except (json.JSONDecodeError, ValueError) as e:
+            logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
             if attempt < max_retries - 1:
-                backoff_time = min(base_backoff * (2 ** attempt) + random.uniform(0, 1), max_backoff)
+                backoff_time = min(1 * (2 ** attempt) + random.uniform(0, 1), 300)
                 logging.info(f"Retrying in {backoff_time:.2f} seconds...")
                 time.sleep(backoff_time)
             else:
-                logging.error(f"Failed to parse JSON after {max_retries} attempts. Raw text: '{json_str}'")
+                logging.error(f"Failed to get valid JSON after {max_retries} attempts.")
                 return {"entities": [], "relationships": []}
-        except Exception as e:
-            logging.error(f"An unexpected error occurred during JSON extraction/validation: {e}. Raw text: '{json_str}'")
-            # No retry for other unexpected errors
-            return {"entities": [], "relationships": []}
-
-    # This part should not be reached if the loop is exited correctly
-    return {"entities": [], "relationships": []}
 
 def clean_text(text):
     '''
@@ -220,9 +212,8 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        extraction_chain = EXTRACTION_PROMPT | llm_json
-        llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
-        extracted_data = extract_json_from_response(llm_response.content)
+        extracted_data = invoke_llm_with_retry(text_chunk)
+
         # Add weight to LLM extracted relationships based on confidence, or default to 1
         for rel in extracted_data.get("relationships", []):
             if "properties" not in rel:
@@ -299,8 +290,6 @@ def worker(request):
 
         return "OK", 200
 
-    except json.JSONDecodeError:
-        return "Error processing model output", 500
     except Exception as e:
         logging.error(f"An unexpected error occurred in worker for batch '{batch_id}': {e}", exc_info=True)
         return "Internal Server Error", 500
