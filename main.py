@@ -237,7 +237,8 @@ def worker(request):
             "type": "Community",
             "properties": {
                 "name": f"Community for Chunk {chunk_number}",
-                "summary": chunk_summary # Community summary can be chunk summary
+                "summary": chunk_summary, # Community summary can be chunk summary
+                "community_type": "contextual"
             }
         }
         extracted_data["entities"].append(chunk_community_entity)
@@ -247,7 +248,7 @@ def worker(request):
             "source": chunk_entity_id,
             "target": chunk_community_id,
             "type": "BELONGS_TO_COMMUNITY", # New relationship type
-            "properties": {"weight": 0.5} # Add weight
+            "properties": {"weight": 0.5, "description": "Indicates that a text chunk belongs to a specific community."}
         })
 
         # 7. Create relationships from extracted entities to the "Chunk" entity
@@ -258,7 +259,7 @@ def worker(request):
                     "source": entity["id"],
                     "target": chunk_entity_id,
                     "type": "ARE_PART_OF_CHUNK", # New relationship type
-                    "properties": {"weight": 1} # Add weight
+                    "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
                 })
 
         # 8. Store the combined data in Redis
