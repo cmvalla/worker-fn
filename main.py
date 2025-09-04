@@ -213,6 +213,7 @@ def worker(request):
 
         # 4. Call the model to extract knowledge from the original text_chunk
         extracted_data = invoke_llm_with_retry(text_chunk)
+        logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}")
 
         # Add weight to LLM extracted relationships based on confidence, or default to 1
         for rel in extracted_data.get("relationships", []):
