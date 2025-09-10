@@ -53,8 +53,6 @@ except redis.exceptions.ConnectionError as e:
 except Exception as e:
     logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
 
-spanner_client = spanner.Client(project=GCP_PROJECT)
-
 # --- Langchain Model Initialization ---
 llm_json = ChatVertexAI(
     project=GCP_PROJECT,
@@ -197,6 +195,7 @@ def worker(request):
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
 
+        spanner_client = spanner.Client(project=GCP_PROJECT)
         spanner_ops = SpannerOperations(spanner_client, os.environ.get("SPANNER_INSTANCE_ID"), os.environ.get("SPANNER_DATABASE_ID"))
         instance_id = os.environ.get("GAE_INSTANCE")
         worker_batch_id = f"{batch_id}:{chunk_number}"
