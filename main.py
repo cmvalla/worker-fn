@@ -190,3 +190,108 @@ def worker(request):
         if not all([text_chunk, batch_id, total_chunks]):
             logging.error("Missing 'chunk', 'batch_id', or 'total_chunks' in the request.")
             return "Bad Request: Missing required fields", 400
+
+        logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
+
+        # 2. Generate summary for the chunk
+        summary_chain = SUMMARY_PROMPT | llm_text
+        summary_response = summary_chain.invoke({"text_chunk": text_chunk})
+        chunk_summary = summary_response.content.strip()
+        logging.info(f"Generated summary for chunk {chunk_number}: {chunk_summary}")
+
+        # 3. Create the "Chunk" entity
+        chunk_entity_id = f"chunk-{batch_id}-{chunk_number}"
+        chunk_entity = {
+            "id": chunk_entity_id,
+            "type": "Chunk",
+            "properties": {
+                "original_text": text_chunk,
+                "summary": chunk_summary,
+                "chunk_number": chunk_number
+            }
+        }
+
+        # 4. Call the model to extract knowledge from the original text_chunk
+        extracted_data = invoke_llm_with_retry(text_chunk)
+        logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}")
+
+        # Add weight to LLM extracted relationships based on confidence, or default to 1
+        for rel in extracted_data.get("relationships", []):
+            if "properties" not in rel:
+                rel["properties"] = {}
+            confidence = rel["properties"].get("confidence")
+            if isinstance(confidence, (int, float)):
+                rel["properties"]["weight"] = float(confidence)
+            else:
+                rel["properties"]["weight"] = 1.0 # Default weight if confidence is not provided or invalid
+        logging.info(f"Successfully parsed JSON from model output for batch '{batch_id}'.")
+        logging.info(f"Extracted data: {json.dumps(extracted_data)}")
+        logging.info(f"Extracted data before appending chunk entity: {json.dumps(extracted_data)}")
+
+        # 5. Add the "Chunk" entity to the extracted entities
+        extracted_data["entities"].append(chunk_entity)
+
+        # 6. Create a community for the chunk and link it
+        chunk_community_id = f"community-{chunk_entity_id}"
+        chunk_community_entity = {
+            "id": chunk_community_id,
+            "type": "Community",
+            "properties": {
+                "name": f"Community for Chunk {chunk_number}",
+                "summary": chunk_summary, # Community summary can be chunk summary
+                "community_type": "contextual"
+            }
+        }
+        extracted_data["entities"].append(chunk_community_entity)
+
+        # Relationship: Chunk BELONGS_TO ChunkCommunity
+        extracted_data["relationships"].append({
+            "source": chunk_entity_id,
+            "target": chunk_community_id,
+            "type": "BELONGS_TO_COMMUNITY", # New relationship type
+            "properties": {"weight": 0.5, "description": "Indicates that a text chunk belongs to a specific community."}
+        })
+
+        # 7. Create relationships from extracted entities to the "Chunk" entity
+        for entity in extracted_data["entities"]:
+            # Avoid linking the chunk entity to itself or the community entity to itself
+            if entity["id"] != chunk_entity_id and entity["id"] != chunk_community_id:
+                extracted_data["relationships"].append({
+                    "source": entity["id"],
+                    "target": chunk_entity_id,
+                    "type": "ARE_PART_OF_CHUNK", # New relationship type
+                    "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
+                })
+
+        # 8. Store the combined data in Redis
+        # The consolidator will need to be updated to handle this new structure
+        redis_value = {
+            "batch_id": batch_id,
+            "chunk_number": chunk_number,
+            "extracted_graph_data": extracted_data # Store the combined entities and relationships
+        }
+        results_key = f"batch:{batch_id}:results"
+        redis_client.rpush(results_key, json.dumps(redis_value))
+
+        # Increment the counter for the entire chunk, not per sentence
+        counter_key = f"batch:{batch_id}:counter" # Ensure counter_key is defined
+        current_count = redis_client.incr(counter_key)
+        logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
+
+        # 5. If all chunks are processed, trigger consolidation
+        if current_count >= total_chunks:
+            logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = publisher.topic_path(GCP_PROJECT, CONSOLIDATION_TOPIC)
+
+            message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
+            future = publisher.publish(topic_path, data=message_data)
+            message_id = future.result()
+
+            logging.info(f"Successfully published consolidation trigger message {message_id} to topic {topic_path}.")
+
+        return "OK", 200
+
+    except Exception as e:
+        logging.error(f"An unexpected error occurred in worker for batch '{batch_id}': {e}", exc_info=True)
+        return "Internal Server Error", 500
