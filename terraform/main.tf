@@ -80,12 +80,12 @@ resource "google_cloud_run_v2_service" "worker" {
         value = var.redis_port
       }
       env {
-        name  = "SPANNER_INSTANCE"
-        value = var.spanner_instance
+        name  = "SPANNER_INSTANCE_ID"
+        value = var.spanner_instance_id
       }
       env {
-        name  = "SPANNER_DATABASE"
-        value = var.spanner_database
+        name  = "SPANNER_DATABASE_ID"
+        value = var.spanner_database_id
       }
       env {
         name = "CONSOLIDATION_TOPIC"

@@ -48,12 +48,12 @@ variable "redis_port" {
   description = "The Redis port."
 }
 
-variable "spanner_instance" {
+variable "spanner_instance_id" {
   type        = string
   description = "The Spanner instance ID."
 }
 
-variable "spanner_database" {
+variable "spanner_database_id" {
   type        = string
   description = "The Spanner database ID."
 }
