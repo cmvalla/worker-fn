@@ -13,7 +13,6 @@ import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
 from google.cloud import spanner
-from spanner_operations import SpannerOperations
 
 
 
@@ -195,6 +194,7 @@ def worker(request):
 
         logging.info(f"Worker received chunk for batch_id '{batch_id}'. Total chunks expected: {total_chunks}")
 
+        from spanner_operations import SpannerOperations
         spanner_client = spanner.Client(project=GCP_PROJECT)
         spanner_ops = SpannerOperations(spanner_client, os.environ.get("SPANNER_INSTANCE_ID"), os.environ.get("SPANNER_DATABASE_ID"))
         instance_id = os.environ.get("GAE_INSTANCE")
