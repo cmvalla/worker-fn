@@ -31,6 +31,8 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 # Retrieve Redis password from Secret Manager
 REDIS_PASSWORD = secretmanager.SecretManagerServiceClient().access_secret_version(request={"name": f"projects/{GCP_PROJECT}/secrets/redis-password/versions/latest"}).payload.data.decode("UTF-8")
 CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
+SPANNER_INSTANCE_ID = os.environ.get("SPANNER_INSTANCE_ID")
+SPANNER_DATABASE_ID = os.environ.get("SPANNER_DATABASE_ID")
 # The worker function will use the service account credentials for authentication
 # The GOOGLE_APPLICATION_CREDENTIALS environment variable should be set to the path of the service account key file
 
