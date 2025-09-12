@@ -3,47 +3,49 @@ import json
 import pytest
 from unittest.mock import Mock, patch
 
-@patch("google.cloud.secretmanager.SecretManagerServiceClient")
-def test_worker(MockSecretManager):
+@patch("main.get_redis_password", return_value="test_password")
+@patch("main.get_redis_client")
+@patch("langchain_google_vertexai.chat_models.ChatVertexAI")
+def test_worker(MockChatVertexAI, MockGetRedisClient, MockGetRedisPassword):
     """
     Tests the worker function.
     """
-    # --- Mock the SecretManagerServiceClient ---
-    MockSecretManager.return_value.access_secret_version.return_value.payload.data = b"test_password"
+    # Set dummy environment variables for the test
+    os.environ["REDIS_HOST"] = "mock_redis_host"
+    os.environ["CONSOLIDATION_TOPIC"] = "mock_consolidation_topic"
+
+    # --- Mock the Redis Client ---
+    mock_redis_instance = Mock()
+    mock_redis_instance.ping.return_value = True
+    mock_redis_instance.rpush.return_value = 1
+    mock_redis_instance.incr.return_value = 1
+    MockGetRedisClient.return_value = mock_redis_instance
+
+    # --- Mock the input data ---
+    mock_request = Mock()
+    mock_request.get_json.return_value = {
+        "chunk": {
+            "page_content": "Bill Gates is the co-founder of Microsoft."
+        },
+        "batch_id": "test_batch_123",
+        "total_chunks": 1,
+        "chunk_number": 0
+    }
 
     # --- Import the worker function ---
     from main import worker
 
     # --- Mock the external clients ---
-    with patch("main.redis.Redis") as MockRedis, \
-         patch("main.llm") as mock_llm, \
-         patch("main.pubsub_v1.PublisherClient") as MockPublisherClient:
-
-        mock_redis_client = Mock()
-        MockRedis.return_value = mock_redis_client
+    with patch("main.pubsub_v1.PublisherClient") as MockPublisherClient:
 
         mock_publisher_client = Mock()
         MockPublisherClient.return_value = mock_publisher_client
         mock_publisher_client.topic_path.return_value = "projects/test-project/topics/test-topic"
         mock_publisher_client.publish.return_value.result.return_value = "test_message_id"
 
-
-        # --- Mock the input data ---
-        mock_request = Mock()
-        mock_request.get_json.return_value = {
-            "chunk": {
-                "page_content": "Bill Gates is the co-founder of Microsoft."
-            },
-            "batch_id": "test_batch_123",
-            "total_chunks": 1,
-            "chunk_number": 0
-        }
-
         # --- Mock the LLM responses ---
-        mock_summary_response = Mock()
-        mock_summary_response.content = "Bill Gates co-founded Microsoft."
-        mock_extraction_response = Mock()
-        mock_extraction_response.content = json.dumps({
+        mock_summary_response_content = "Bill Gates co-founded Microsoft."
+        mock_extraction_response_content = json.dumps({
             "entities": [
                 {"id": "1", "type": "Person", "properties": {"name": "Bill Gates"}},
                 {"id": "2", "type": "Organization", "properties": {"name": "Microsoft"}}
@@ -53,10 +55,10 @@ def test_worker(MockSecretManager):
             ]
         })
         
-        mock_llm.invoke.side_effect = [
-                mock_summary_response,
-                mock_extraction_response 
-                ]
+        # Configure the mock ChatVertexAI instance for llm_text
+        mock_llm_text_response_obj = mock_summary_response.content
+        mock_llm_json_response_obj = mock_extraction_response.content
+        MockChatVertexAI.return_value.invoke.side_effect = [mock_llm_text_response_obj, mock_llm_json_response_obj]
         
 
         # --- Invoke the Worker Function ---
@@ -67,8 +69,8 @@ def test_worker(MockSecretManager):
         assert response == "OK"
 
         # Assert that Redis was called correctly
-        mock_redis_client.rpush.assert_called_once()
-        mock_redis_client.incr.assert_called_once_with("batch:test_batch_123:counter")
+        mock_redis_instance.rpush.assert_called_once()
+        mock_redis_instance.incr.assert_called_once_with("batch:test_batch_123:counter")
 
 if __name__ == "__main__":
     pytest.main([__file__])
