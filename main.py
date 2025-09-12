@@ -176,13 +176,22 @@ def worker(request):
 
     try:
         # 1. Parse the incoming request
-        request_json = request.get_json(silent=True)
-        logging.info(f"Worker received request_json: {request_json}") # Added logging
-        if not request_json:
-            logging.error("Request body is not valid JSON.")
+        # The request body is a base64-encoded JSON string. The framework decodes base64,
+        # but we need to manually parse the JSON string.
+        data_str = request.get_data(as_text=True)
+        if not data_str:
+            logging.error("Request body is empty.")
+            return "Bad Request: Empty body", 400
+        
+        try:
+            request_json = json.loads(data_str)
+        except json.JSONDecodeError:
+            logging.error(f"Failed to decode JSON from request body: {data_str}")
             return "Bad Request: Invalid JSON", 400
 
-        text_chunk = request_json.get("chunk", {}).get("page_content")
+        logging.info(f"Worker received request_json: {request_json}")
+        
+        text_chunk = request_json.get("chunk")
         batch_id = request_json.get("batch_id")
         total_chunks = request_json.get("total_chunks")
         chunk_number = request_json.get("chunk_number", 0) # Assuming chunk_number is passed from orchestrator
