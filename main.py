@@ -22,48 +22,37 @@ logging_client = cloud_logging.Client()
 logging_client.setup_logging()
 logging.basicConfig(level=logging.INFO)
 
-# --- Environment Variables -- -
-GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.environ.get("GCP_LOCATION", "europe-west1")
-REDIS_HOST = os.environ.get("REDIS_HOST")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-# Retrieve Redis password from Secret Manager
-REDIS_PASSWORD = secretmanager.SecretManagerServiceClient().access_secret_version(request={"name": f"projects/{GCP_PROJECT}/secrets/redis-password/versions/latest"}).payload.data.decode("UTF-8")
-CONSOLIDATION_TOPIC = os.environ.get("CONSOLIDATION_TOPIC")
-# The worker function will use the service account credentials for authentication
-# The GOOGLE_APPLICATION_CREDENTIALS environment variable should be set to the path of the service account key file
 
+def get_redis_password(gcp_project):
+    """Retrieves the Redis password from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{gcp_project}/secrets/redis-password/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        logging.critical(f"Failed to retrieve Redis password from Secret Manager: {e}", exc_info=True)
+        return None
 
-logging.info(f"Initializing worker for project '{GCP_PROJECT}' in location '{LOCATION}'")
-if not all([REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC]):
-    logging.critical("FATAL: Missing one or more required environment variables: REDIS_HOST, REDIS_PASSWORD, CONSOLIDATION_TOPIC")
+def get_redis_client(redis_host, redis_port, gcp_project):
+    """Initializes and returns a Redis client."""
+    redis_password = get_redis_password(gcp_project)
+    if not all([redis_host, redis_password]):
+        logging.critical("FATAL: Missing one or more required environment variables: REDIS_HOST, REDIS_PASSWORD")
+        return None
 
-# --- Global Clients -- -
-redis_client = None
-
-try:
-    logging.info(f"Initializing Redis client for host '{REDIS_HOST}'...")
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, socket_connect_timeout=10, ssl=False)
-    redis_client.ping()
-    logging.info("Redis client initialized and connected successfully.")
-except redis.exceptions.ConnectionError as e:
-    logging.critical(f"FATAL: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}. Please check the host, port, and firewall settings. Error: {e}", exc_info=True)
-except Exception as e:
-    logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
-
-# --- Langchain Model Initialization ---
-llm_json = ChatVertexAI(
-    project=GCP_PROJECT,
-    location=LOCATION,
-    model_name="gemini-2.5-flash",
-    response_mime_type="application/json",
-)
-llm_text = ChatVertexAI(
-    project=GCP_PROJECT,
-    location=LOCATION,
-    model_name="gemini-2.5-flash",
-)
-json_parser = JsonOutputParser()
+    try:
+        logging.info(f"Initializing Redis client for host '{redis_host}'...")
+        redis_client = redis.Redis(host=redis_host, port=redis_port, password=redis_password, socket_connect_timeout=10, ssl=False)
+        redis_client.ping()
+        logging.info("Redis client initialized and connected successfully.")
+        return redis_client
+    except redis.exceptions.ConnectionError as e:
+        logging.critical(f"FATAL: Could not connect to Redis at {redis_host}:{redis_port}. Please check the host, port, and firewall settings. Error: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
+        return None
 
 # --- Prompt Templates for Langchain ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
@@ -132,7 +121,7 @@ def extract_json_from_response(text):
 
     return extracted_data
 
-def invoke_llm_with_retry(text_chunk, max_retries=5):
+def invoke_llm_with_retry(text_chunk, llm_json, max_retries=5):
     extraction_chain = EXTRACTION_PROMPT | llm_json
     
     for attempt in range(max_retries):
@@ -166,10 +155,30 @@ def clean_text(text):
 
 @functions_framework.http
 def worker(request):
-    '''
-    Processes a text chunk, extracts knowledge, stores it in Redis,
-    and triggers the final consolidation if it's the last chunk.
-    '''
+    # --- Environment Variables -- -
+    gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    location = os.environ.get("GCP_LOCATION", "europe-west1")
+    redis_host = os.environ.get("REDIS_HOST")
+    redis_port = int(os.environ.get("REDIS_PORT", 6379))
+    consolidation_topic = os.environ.get("CONSOLIDATION_TOPIC")
+
+    logging.info(f"Initializing worker for project '{gcp_project}' in location '{location}'")
+
+    # --- Langchain Model Initialization ---
+    llm_json = ChatVertexAI(
+        project=gcp_project,
+        location=location,
+        model_name="gemini-2.5-flash",
+        response_mime_type="application/json",
+    )
+    llm_text = ChatVertexAI(
+        project=gcp_project,
+        location=location,
+        model_name="gemini-2.5-flash",
+    )
+    json_parser = JsonOutputParser()
+
+    redis_client = get_redis_client(redis_host, redis_port, gcp_project)
     if not redis_client:
         logging.critical("FATAL: Redis client is not initialized.")
         return "ERROR: Client initialization failed", 500
@@ -212,7 +221,7 @@ def worker(request):
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-        extracted_data = invoke_llm_with_retry(text_chunk)
+        extracted_data = invoke_llm_with_retry(text_chunk, llm_json)
         logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}")
 
         # Add weight to LLM extracted relationships based on confidence, or default to 1
@@ -282,7 +291,7 @@ def worker(request):
         if current_count >= total_chunks:
             logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
             publisher = pubsub_v1.PublisherClient()
-            topic_path = publisher.topic_path(GCP_PROJECT, CONSOLIDATION_TOPIC)
+            topic_path = publisher.topic_path(gcp_project, consolidation_topic)
 
             message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
             future = publisher.publish(topic_path, data=message_data)
