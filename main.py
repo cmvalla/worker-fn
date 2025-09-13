@@ -233,6 +233,11 @@ def worker(request):
         extracted_data = invoke_llm_with_retry(text_chunk, llm_json)
         logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}")
 
+        # Normalize the entity ID key from '_id' to 'id' to handle LLM inconsistencies
+        for entity in extracted_data.get("entities", []):
+            if "_id" in entity:
+                entity["id"] = entity.pop("_id")
+
         # Add weight to LLM extracted relationships based on confidence, or default to 1
         for rel in extracted_data.get("relationships", []):
             if "properties" not in rel:
