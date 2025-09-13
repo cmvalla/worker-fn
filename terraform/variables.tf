@@ -63,6 +63,12 @@ variable "spanner_database_id" {
   type        = string
 }
 
+variable "gemini_api_key" {
+  description = "The Gemini API key."
+  type        = string
+  sensitive   = true
+}
+
 variable "llm_model_name" {
   description = "The name of the LLM model to use for the worker function."
   type        = string
