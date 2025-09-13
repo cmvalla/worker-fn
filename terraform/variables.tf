@@ -1,80 +1,44 @@
 variable "project_id" {
+  description = "The Google Cloud project ID."
   type        = string
-  description = "The GCP project ID."
-}
-
-variable "region" {
-  type        = string
-  description = "The GCP region."
 }
 
 variable "location" {
+  description = "The GCP region for the Cloud Run service."
   type        = string
-  description = "The GCP location."
-}
-
-variable "repository_id" {
-  type        = string
-  description = "The Artifact Registry repository ID."
-}
-
-variable "image_name" {
-  type        = string
-  description = "The name of the Docker image."
-}
-
-variable "image_tag" {
-  type        = string
-  description = "The tag of the Docker image, typically the Build ID."
-}
-
-variable "image_url" {
-  type        = string
-  description = "The full URL of the Docker image to deploy."
 }
 
 variable "worker_sa_email" {
+  description = "Service account email for the worker function."
   type        = string
-  description = "The email of the service account for the worker function."
+}
+
+variable "image_url" {
+  description = "The URL of the Docker image for the worker function."
+  type        = string
+}
+
+variable "image_tag" {
+  description = "The tag for the Docker image."
+  type        = string
 }
 
 variable "redis_host" {
+  description = "The Redis host."
   type        = string
-  description = "The Redis host IP address."
 }
 
 variable "redis_port" {
-  type        = string
   description = "The Redis port."
-}
-
-variable "spanner_instance_id" {
-  type        = string
-  description = "The Spanner instance ID."
-}
-
-variable "spanner_database_id" {
-  type        = string
-  description = "The Spanner database ID."
+  type        = number
 }
 
 variable "consolidation_topic" {
+  description = "The name of the Pub/Sub topic for consolidation."
   type        = string
-  description = "The Pub/Sub topic for consolidation."
 }
 
-variable "vpc_connector" {
+variable "llm_model_name" {
+  description = "The name of the LLM model to use for the worker function."
   type        = string
-  description = "The Serverless VPC Access connector name."
-}
-
-variable "worker_sa_key_secret_id" {
-  type        = string
-  description = "The full resource name of the Secret Manager secret containing the worker service account key."
-}
-
-variable "gemini_api_key" {
-  type        = string
-  description = "The API key for Gemini."
-  sensitive   = true
 }

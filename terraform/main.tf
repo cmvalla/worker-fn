@@ -91,7 +91,10 @@ resource "google_cloud_run_v2_service" "worker" {
         name = "CONSOLIDATION_TOPIC"
         value = var.consolidation_topic
       }
-      
+      env {
+        name  = "LLM_MODEL_NAME"
+        value = var.llm_model_name
+      }
     }
   }
 }

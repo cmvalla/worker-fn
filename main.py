@@ -165,16 +165,18 @@ def worker(request):
     logging.info(f"Initializing worker for project '{gcp_project}' in location '{location}'")
 
     # --- Langchain Model Initialization ---
+    LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "gemini-2.5-flash") # Default to gemini-2.5-flash if not set
+
     llm_json = ChatVertexAI(
         project=gcp_project,
         location=location,
-        model_name="gemini-2.5-flash",
+        model_name=LLM_MODEL_NAME,
         response_mime_type="application/json",
     )
     llm_text = ChatVertexAI(
         project=gcp_project,
         location=location,
-        model_name="gemini-2.5-flash",
+        model_name=LLM_MODEL_NAME,
     )
     json_parser = JsonOutputParser()
 
