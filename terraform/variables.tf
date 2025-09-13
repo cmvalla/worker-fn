@@ -8,6 +8,11 @@ variable "location" {
   type        = string
 }
 
+variable "region" {
+  description = "The GCP region for the Cloud Run service."
+  type        = string
+}
+
 variable "worker_sa_email" {
   description = "Service account email for the worker function."
   type        = string
@@ -35,6 +40,26 @@ variable "redis_port" {
 
 variable "consolidation_topic" {
   description = "The name of the Pub/Sub topic for consolidation."
+  type        = string
+}
+
+variable "worker_sa_key_secret_id" {
+  description = "The Secret Manager ID for the worker service account key."
+  type        = string
+}
+
+variable "vpc_connector" {
+  description = "The VPC Access connector to use for the Cloud Run service."
+  type        = string
+}
+
+variable "spanner_instance_id" {
+  description = "The Spanner instance ID."
+  type        = string
+}
+
+variable "spanner_database_id" {
+  description = "The Spanner database ID."
   type        = string
 }
 
