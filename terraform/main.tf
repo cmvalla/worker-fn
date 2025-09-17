@@ -72,14 +72,6 @@ resource "google_cloud_run_v2_service" "worker" {
         value = var.location
       }
       env {
-        name  = "REDIS_HOST"
-        value = var.redis_host
-      }
-      env {
-        name  = "REDIS_PORT"
-        value = var.redis_port
-      }
-      env {
         name  = "SPANNER_INSTANCE_ID"
         value = var.spanner_instance_id
       }

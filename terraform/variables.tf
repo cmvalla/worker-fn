@@ -28,16 +28,6 @@ variable "image_tag" {
   type        = string
 }
 
-variable "redis_host" {
-  description = "The Redis host."
-  type        = string
-}
-
-variable "redis_port" {
-  description = "The Redis port."
-  type        = number
-}
-
 variable "consolidation_topic" {
   description = "The name of the Pub/Sub topic for consolidation."
   type        = string
