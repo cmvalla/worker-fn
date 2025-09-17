@@ -5,6 +5,8 @@ import logging
 import time
 import random
 import redis
+import igraph as ig
+import pickle
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
@@ -12,6 +14,7 @@ from google.cloud import pubsub_v1
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
+from google.cloud import storage
 
 
 
@@ -161,6 +164,40 @@ def worker(request):
     redis_host = os.environ.get("REDIS_HOST")
     redis_port = int(os.environ.get("REDIS_PORT", 6379))
     consolidation_topic = os.environ.get("CONSOLIDATION_TOPIC")
+    graph_data_bucket_name = os.environ.get("GRAPH_DATA_BUCKET_NAME")
+
+    if not graph_data_bucket_name:
+        logging.critical("FATAL: GRAPH_DATA_BUCKET_NAME environment variable not set.")
+        return "ERROR: Configuration missing", 500
+
+    storage_client = storage.Client()
+
+def create_igraph_from_extracted_data(extracted_data):
+    graph = ig.Graph()
+    
+    # Add vertices
+    entity_id_to_vertex_index = {}
+    for entity in extracted_data.get("entities", []):
+        vertex = graph.add_vertex(name=entity["id"])
+        for prop_key, prop_value in entity.get("properties", {}).items():
+            vertex[prop_key] = prop_value
+        vertex["type"] = entity["type"] # Store entity type as a vertex attribute
+        entity_id_to_vertex_index[entity["id"]] = vertex.index
+
+    # Add edges
+    for rel in extracted_data.get("relationships", []):
+        source_id = rel["source"]
+        target_id = rel["target"]
+        
+        if source_id in entity_id_to_vertex_index and target_id in entity_id_to_vertex_index:
+            edge = graph.add_edge(entity_id_to_vertex_index[source_id], entity_id_to_vertex_index[target_id])
+            for prop_key, prop_value in rel.get("properties", {}).items():
+                edge[prop_key] = prop_value
+            edge["type"] = rel["type"] # Store relationship type as an edge attribute
+        else:
+            logging.warning(f"Skipping relationship due to missing source or target entity: {rel}")
+            
+    return graph
 
     logging.info(f"Initializing worker for project '{gcp_project}' in location '{location}'")
 
@@ -288,32 +325,47 @@ def worker(request):
                     "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
                 })
 
-        # 8. Store the combined data in Redis
-        # The consolidator will need to be updated to handle this new structure
-        redis_value = {
-            "batch_id": batch_id,
-            "chunk_number": chunk_number,
-            "extracted_graph_data": extracted_data # Store the combined entities and relationships
-        }
-        results_key = f"batch:{batch_id}:results"
-        redis_client.rpush(results_key, json.dumps(redis_value))
+        # 8. Create igraph, serialize, and store in GCS
+        graph = create_igraph_from_extracted_data(extracted_data)
+        serialized_graph = pickle.dumps(graph)
 
-        # Increment the counter for the entire chunk, not per sentence
-        counter_key = f"batch:{batch_id}:counter" # Ensure counter_key is defined
+        # Generate a unique object name for the GCS blob
+        timestamp = int(time.time())
+        gcs_object_name = f"graph_data/{batch_id}/{chunk_number}_{timestamp}.pkl"
+        gcs_path = f"gs://{graph_data_bucket_name}/{gcs_object_name}"
+
+        # Upload to GCS
+        bucket = storage_client.bucket(graph_data_bucket_name)
+        blob = bucket.blob(gcs_object_name)
+        blob.upload_from_string(serialized_graph)
+        logging.info(f"Uploaded serialized igraph for batch {batch_id}, chunk {chunk_number} to {gcs_path}")
+
+        # Store GCS path in Redis
+        gcs_paths_key = f"batch:{batch_id}:gcs_paths"
+        redis_client.rpush(gcs_paths_key, gcs_path)
+
+        # Increment the counter for the entire chunk
+        counter_key = f"batch:{batch_id}:counter"
         current_count = redis_client.incr(counter_key)
-        logging.info(f"Stored result for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
+        logging.info(f"Stored GCS path for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
 
-        # 5. If all chunks are processed, trigger consolidation
+        # 9. If all chunks are processed, trigger consolidation
         if current_count >= total_chunks:
             logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
             publisher = pubsub_v1.PublisherClient()
             topic_path = publisher.topic_path(gcp_project, consolidation_topic)
 
-            message_data = json.dumps({"batch_id": batch_id}).encode("utf-8")
+            # Retrieve all GCS paths for this batch
+            all_gcs_paths = [path.decode('utf-8') for path in redis_client.lrange(gcs_paths_key, 0, -1)]
+            
+            message_data = json.dumps({"batch_id": batch_id, "gcs_paths": all_gcs_paths}).encode("utf-8")
             future = publisher.publish(topic_path, data=message_data)
             message_id = future.result()
 
-            logging.info(f"Successfully published consolidation trigger message {message_id} to topic {topic_path}.")
+            logging.info(f"Successfully published consolidation trigger message {message_id} with GCS paths to topic {topic_path}.")
+            
+            # Clean up Redis paths for this batch
+            redis_client.delete(gcs_paths_key)
 
         return "OK", 200
 

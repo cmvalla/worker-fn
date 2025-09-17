@@ -7,3 +7,4 @@ google-cloud-secret-manager
 nltk
 langchain-google-vertexai
 langchain
+python-igraph
