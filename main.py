@@ -271,7 +271,7 @@ def worker(request):
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(gcp_project, consolidation_topic)
 
-        message_data = json.dumps({"batch_id": batch_id, "gcs_path": gcs_path, "chunk_number": chunk_number, "total_chunks": total_chunks}).encode("utf-8")
+        message_data = json.dumps({"batch_id": batch_id, "gcs_paths": [gcs_path], "chunk_number": chunk_number, "total_chunks": total_chunks}).encode("utf-8")
         future = publisher.publish(topic_path, data=message_data)
         message_id = future.result()
 
