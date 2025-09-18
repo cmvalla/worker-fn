@@ -208,6 +208,7 @@ def worker(request):
         location=location,
         model_name=LLM_MODEL_NAME,
     )
+    llm_ops = LLMOperations(llm_text)
     json_parser = JsonOutputParser()
 
     try:
