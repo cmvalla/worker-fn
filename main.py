@@ -26,7 +26,7 @@ For each entity, ensure its 'name' property retains the original language from t
 Relationships should connect two entities by their IDs. The relationship object MUST have 'source' and 'target' fields, which are the IDs of the connected entities. It should also have a 'type' (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). For relationships, the 'type' property must also retain the original language from the text. For every single relationship you extract, you MUST provide a 'confidence' score between 0.0 and 1.0 in its properties. The confidence score should reflect how certain you are that the relationship is correctly stated in the text. A higher score means higher certainty.
 IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
-Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations.
+Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations. Make sure the output is a single valid JSON object, and nothing else.
 """),
     ("user", """TEXT:
 ---
@@ -92,7 +92,6 @@ def invoke_llm_with_retry(text_chunk, llm_json, max_retries=5):
         try:
             logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
             llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
-            logging.error(f"LLM response content: {llm_response.content}")
             return extract_json_from_response(llm_response.content)
         except (json.JSONDecodeError, ValueError) as e:
             logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
