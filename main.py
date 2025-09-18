@@ -92,6 +92,7 @@ def invoke_llm_with_retry(text_chunk, llm_json, max_retries=5):
         try:
             logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
             llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
+            logging.error(f"LLM response content: {llm_response.content}")
             return extract_json_from_response(llm_response.content)
         except (json.JSONDecodeError, ValueError) as e:
             logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
