@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "worker" {
         name  = "LLM_MODEL_NAME"
         value = var.llm_model_name
       }
+      env {
+        name  = "GRAPH_DATA_BUCKET_NAME"
+        value = var.graph_data_bucket_name
+      }
     }
   }
 }

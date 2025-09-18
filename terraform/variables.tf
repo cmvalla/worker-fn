@@ -63,3 +63,8 @@ variable "llm_model_name" {
   description = "The name of the LLM model to use for the worker function."
   type        = string
 }
+
+variable "graph_data_bucket_name" {
+  description = "The name of the GCS bucket for graph data."
+  type        = string
+}
