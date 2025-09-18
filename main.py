@@ -18,45 +18,6 @@ from google.cloud import storage
 
 
 
-# --- Boilerplate and Configuration -- -
-
-# Setup structured logging
-logging_client = cloud_logging.Client()
-logging_client.setup_logging()
-logging.basicConfig(level=logging.INFO)
-
-
-def get_redis_password(gcp_project):
-    """Retrieves the Redis password from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{gcp_project}/secrets/redis-password/versions/latest"
-        response = client.access_secret_version(request={"name": name})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        logging.critical(f"Failed to retrieve Redis password from Secret Manager: {e}", exc_info=True)
-        return None
-
-def get_redis_client(redis_host, redis_port, gcp_project):
-    """Initializes and returns a Redis client."""
-    redis_password = get_redis_password(gcp_project)
-    if not all([redis_host, redis_password]):
-        logging.critical("FATAL: Missing one or more required environment variables: REDIS_HOST, REDIS_PASSWORD")
-        return None
-
-    try:
-        logging.info(f"Initializing Redis client for host '{redis_host}'...")
-        redis_client = redis.Redis(host=redis_host, port=redis_port, password=redis_password, socket_connect_timeout=10, ssl=False)
-        redis_client.ping()
-        logging.info("Redis client initialized and connected successfully.")
-        return redis_client
-    except redis.exceptions.ConnectionError as e:
-        logging.critical(f"FATAL: Could not connect to Redis at {redis_host}:{redis_port}. Please check the host, port, and firewall settings. Error: {e}", exc_info=True)
-        return None
-    except Exception as e:
-        logging.critical(f"FATAL: Failed to initialize Redis client: {e}", exc_info=True)
-        return None
-
 # --- Prompt Templates for Langchain ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
@@ -161,8 +122,6 @@ def worker(request):
     # --- Environment Variables -- -
     gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     location = os.environ.get("GCP_LOCATION", "europe-west1")
-    redis_host = os.environ.get("REDIS_HOST")
-    redis_port = int(os.environ.get("REDIS_PORT", 6379))
     consolidation_topic = os.environ.get("CONSOLIDATION_TOPIC")
     graph_data_bucket_name = os.environ.get("GRAPH_DATA_BUCKET_NAME")
 
@@ -216,11 +175,6 @@ def create_igraph_from_extracted_data(extracted_data):
         model_name=LLM_MODEL_NAME,
     )
     json_parser = JsonOutputParser()
-
-    redis_client = get_redis_client(redis_host, redis_port, gcp_project)
-    if not redis_client:
-        logging.critical("FATAL: Redis client is not initialized.")
-        return "ERROR: Client initialization failed", 500
 
     try:
         # 1. Parse the incoming request
@@ -340,32 +294,15 @@ def create_igraph_from_extracted_data(extracted_data):
         blob.upload_from_string(serialized_graph)
         logging.info(f"Uploaded serialized igraph for batch {batch_id}, chunk {chunk_number} to {gcs_path}")
 
-        # Store GCS path in Redis
-        gcs_paths_key = f"batch:{batch_id}:gcs_paths"
-        redis_client.rpush(gcs_paths_key, gcs_path)
+        # 9. Publish message to consolidation topic
+        publisher = pubsub_v1.PublisherClient()
+        topic_path = publisher.topic_path(gcp_project, consolidation_topic)
 
-        # Increment the counter for the entire chunk
-        counter_key = f"batch:{batch_id}:counter"
-        current_count = redis_client.incr(counter_key)
-        logging.info(f"Stored GCS path for batch '{batch_id}'. Progress: {current_count}/{total_chunks}.")
+        message_data = json.dumps({"batch_id": batch_id, "gcs_path": gcs_path, "chunk_number": chunk_number, "total_chunks": total_chunks}).encode("utf-8")
+        future = publisher.publish(topic_path, data=message_data)
+        message_id = future.result()
 
-        # 9. If all chunks are processed, trigger consolidation
-        if current_count >= total_chunks:
-            logging.info(f"All chunks received for batch '{batch_id}'. Triggering consolidation.")
-            publisher = pubsub_v1.PublisherClient()
-            topic_path = publisher.topic_path(gcp_project, consolidation_topic)
-
-            # Retrieve all GCS paths for this batch
-            all_gcs_paths = [path.decode('utf-8') for path in redis_client.lrange(gcs_paths_key, 0, -1)]
-            
-            message_data = json.dumps({"batch_id": batch_id, "gcs_paths": all_gcs_paths}).encode("utf-8")
-            future = publisher.publish(topic_path, data=message_data)
-            message_id = future.result()
-
-            logging.info(f"Successfully published consolidation trigger message {message_id} with GCS paths to topic {topic_path}.")
-            
-            # Clean up Redis paths for this batch
-            redis_client.delete(gcs_paths_key)
+        logging.info(f"Published message with GCS path for batch {batch_id}, chunk {chunk_number} to topic {topic_path}.")
 
         return "OK", 200
 
