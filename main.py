@@ -131,33 +131,6 @@ def worker(request):
 
     storage_client = storage.Client()
 
-def create_igraph_from_extracted_data(extracted_data):
-    graph = ig.Graph()
-    
-    # Add vertices
-    entity_id_to_vertex_index = {}
-    for entity in extracted_data.get("entities", []):
-        vertex = graph.add_vertex(name=entity["id"])
-        for prop_key, prop_value in entity.get("properties", {}).items():
-            vertex[prop_key] = prop_value
-        vertex["type"] = entity["type"] # Store entity type as a vertex attribute
-        entity_id_to_vertex_index[entity["id"]] = vertex.index
-
-    # Add edges
-    for rel in extracted_data.get("relationships", []):
-        source_id = rel["source"]
-        target_id = rel["target"]
-        
-        if source_id in entity_id_to_vertex_index and target_id in entity_id_to_vertex_index:
-            edge = graph.add_edge(entity_id_to_vertex_index[source_id], entity_id_to_vertex_index[target_id])
-            for prop_key, prop_value in rel.get("properties", {}).items():
-                edge[prop_key] = prop_value
-            edge["type"] = rel["type"] # Store relationship type as an edge attribute
-        else:
-            logging.warning(f"Skipping relationship due to missing source or target entity: {rel}")
-            
-    return graph
-
     logging.info(f"Initializing worker for project '{gcp_project}' in location '{location}'")
 
     # --- Langchain Model Initialization ---
@@ -309,3 +282,30 @@ def create_igraph_from_extracted_data(extracted_data):
     except Exception as e:
         logging.error(f"An unexpected error occurred in worker for batch '{batch_id}': {e}", exc_info=True)
         return "Internal Server Error", 500
+
+def create_igraph_from_extracted_data(extracted_data):
+    graph = ig.Graph()
+    
+    # Add vertices
+    entity_id_to_vertex_index = {}
+    for entity in extracted_data.get("entities", []):
+        vertex = graph.add_vertex(name=entity["id"])
+        for prop_key, prop_value in entity.get("properties", {}).items():
+            vertex[prop_key] = prop_value
+        vertex["type"] = entity["type"] # Store entity type as a vertex attribute
+        entity_id_to_vertex_index[entity["id"]] = vertex.index
+
+    # Add edges
+    for rel in extracted_data.get("relationships", []):
+        source_id = rel["source"]
+        target_id = rel["target"]
+        
+        if source_id in entity_id_to_vertex_index and target_id in entity_id_to_vertex_index:
+            edge = graph.add_edge(entity_id_to_vertex_index[source_id], entity_id_to_vertex_index[target_id])
+            for prop_key, prop_value in rel.get("properties", {}).items():
+                edge[prop_key] = prop_value
+            edge["type"] = rel["type"] # Store relationship type as an edge attribute
+        else:
+            logging.warning(f"Skipping relationship due to missing source or target entity: {rel}")
+            
+    return graph
