@@ -197,17 +197,22 @@ def worker(request):
     # --- Langchain Model Initialization ---
     LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "gemini-2.5-flash") # Default to gemini-2.5-flash if not set
 
-    llm_json = ChatVertexAI(
-        project=gcp_project,
-        location=location,
-        model_name=LLM_MODEL_NAME,
-        response_mime_type="application/json",
-    )
-    llm_text = ChatVertexAI(
-        project=gcp_project,
-        location=location,
-        model_name=LLM_MODEL_NAME,
-    )
+llm_json = ChatVertexAI(
+    project=Config.GCP_PROJECT,
+    location=Config.LOCATION,
+    model_name=LLM_MODEL_NAME,
+    temperature=0,
+    max_output_tokens=2048,
+    google_api_key=Config.GEMINI_API_KEY
+)
+llm_text = ChatVertexAI(
+    project=Config.GCP_PROJECT,
+    location=Config.LOCATION,
+    model_name=LLM_MODEL_NAME,
+    temperature=0.5,
+    max_output_tokens=2048,
+    google_api_key=Config.GEMINI_API_KEY
+)
     llm_ops = LLMOperations(llm_text)
     json_parser = JsonOutputParser()
 

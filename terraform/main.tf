@@ -8,6 +8,11 @@ data "google_secret_manager_secret_version" "worker_sa_key" {
   secret  = var.worker_sa_key_secret_id
 }
 
+data "google_secret_manager_secret_version" "gemini_api_key" {
+  project = var.project_id
+  secret  = var.gemini_api_key
+}
+
 
 
 resource "google_cloud_run_v2_service" "worker" {
@@ -26,7 +31,6 @@ resource "google_cloud_run_v2_service" "worker" {
     percent = 100
   }
   template {
-    service_account_name = data.google_service_account.worker_sa.email
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     vpc_access {
       connector = var.vpc_connector
@@ -95,6 +99,10 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "EMBEDDING_SERVICE_URL"
         value = var.embedding_service_url
+      }
+      env {
+        name = "GEMINI_API_KEY"
+        value = data.google_secret_manager_secret_version.gemini_api_key.secret_data
       }
     }
   }
