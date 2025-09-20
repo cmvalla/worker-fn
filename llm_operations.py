@@ -80,7 +80,7 @@ class LLMOperations:
             
             # Call the embedding service
             credentials, project = google.auth.default()
-            authed_session = google.auth.transport.requests.AuthorizedSession(credentials)
+            authed_session = google.auth.transport.requests.AuthorizedSession(credentials, audience=self.embedding_service_url)
             
             headers = {"Content-Type": "application/json"}
             payload = {"texts": batch_texts}
