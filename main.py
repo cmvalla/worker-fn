@@ -199,19 +199,16 @@ def worker(request):
 
     llm_json = ChatVertexAI(
         project=Config.GCP_PROJECT,
-        location=Config.LOCATION,
+        location=os.environ.get("GCP_LOCATION", "europe-west1"), # Explicitly get from env with default
         model_name=LLM_MODEL_NAME,
-        temperature=0,
-        max_output_tokens=2048,
-        google_api_key=Config.GEMINI_API_KEY
+        max_output_tokens=65536
     )
     llm_text = ChatVertexAI(
         project=Config.GCP_PROJECT,
-        location=Config.LOCATION,
+        location=os.environ.get("GCP_LOCATION", "europe-west1"), # Explicitly get from env with default
         model_name=LLM_MODEL_NAME,
         temperature=0.5,
-        max_output_tokens=2048,
-        google_api_key=Config.GEMINI_API_KEY
+        max_output_tokens=65536
     )
     llm_ops = LLMOperations(llm_text)
     json_parser = JsonOutputParser()
