@@ -210,6 +210,14 @@ def worker(request):
 
     logging.info(f"Initializing worker for project '{gcp_project}' in location '{location}'")
 
+    # Log the service account being used
+    try:
+        credentials, project = google.auth.default()
+        service_account_email = credentials.service_account_email
+        logging.info(f"Worker running with service account: {service_account_email}")
+    except Exception as e:
+        logging.warning(f"Could not determine service account: {e}")
+
     # --- Langchain Model Initialization ---
     LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "gemini-2.5-flash") # Default to gemini-2.5-flash if not set
 
