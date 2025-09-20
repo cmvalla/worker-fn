@@ -7,7 +7,7 @@ class Config:
     REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
     SPANNER_INSTANCE_ID = os.environ.get("SPANNER_INSTANCE_ID")
     SPANNER_DATABASE_ID = os.environ.get("SPANNER_DATABASE_ID")
-    LOCATION = os.environ.get("LOCATION")
+    LOCATION = os.environ.get("GCP_LOCATION")
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     EMBEDDING_SERVICE_URL = os.environ.get("EMBEDDING_SERVICE_URL")
     MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 5))
