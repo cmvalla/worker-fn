@@ -5,6 +5,8 @@ import logging
 from config import Config
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_vertexai.chat_models import ChatVertexAI
+import google.auth
+import google.auth.transport.requests
 
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
@@ -77,10 +79,13 @@ class LLMOperations:
             batch_texts = [texts_to_embed_map[eid] for eid in batch_entity_ids]
             
             # Call the embedding service
+            credentials, project = google.auth.default()
+            authed_session = google.auth.transport.requests.AuthorizedSession(credentials)
+            
             headers = {"Content-Type": "application/json"}
             payload = {"texts": batch_texts}
             try:
-                response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
+                response = authed_session.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
                 response.raise_for_status()  # Raise an exception for HTTP errors
                 batch_embeddings = response.json()
 
