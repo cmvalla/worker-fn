@@ -17,7 +17,7 @@ import google.cloud.secretmanager as secretmanager
 from google.cloud import storage
 from typing import List
 from config import Config
-from config import Config
+from llm_operations import LLMOperations
 
 
 
