@@ -13,3 +13,4 @@ crash.log
 
 # License files
 LICENSE
+terraform.tfvars
