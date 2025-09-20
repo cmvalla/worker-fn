@@ -38,7 +38,7 @@ resource "google_cloud_run_v2_service" "worker" {
     }
     scaling {
       min_instance_count = 0
-      max_instance_count = 5
+      max_instance_count = 10
     }
     max_instance_request_concurrency = 50
     volumes {
