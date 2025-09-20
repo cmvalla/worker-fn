@@ -68,3 +68,8 @@ variable "graph_data_bucket_name" {
   description = "The name of the GCS bucket for graph data."
   type        = string
 }
+
+variable "embedding_service_url" {
+  description = "The URL of the embedding service."
+  type        = string
+}

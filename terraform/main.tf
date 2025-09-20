@@ -91,6 +91,10 @@ resource "google_cloud_run_v2_service" "worker" {
         name  = "GRAPH_DATA_BUCKET_NAME"
         value = var.graph_data_bucket_name
       }
+      env {
+        name  = "EMBEDDING_SERVICE_URL"
+        value = var.embedding_service_url
+      }
     }
   }
 }
