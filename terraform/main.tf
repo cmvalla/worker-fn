@@ -26,6 +26,7 @@ resource "google_cloud_run_v2_service" "worker" {
     percent = 100
   }
   template {
+    service_account_name = data.google_service_account.worker_sa.email
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     vpc_access {
       connector = var.vpc_connector
