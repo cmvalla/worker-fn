@@ -79,6 +79,22 @@ def extract_json_from_response(text):
     # Remove "insensitive:true" from the string
     json_str = json_str.replace("insensitive:true", "")
 
+    # Aggressively strip any leading/trailing non-JSON characters
+    json_str = json_str.strip()
+    if not json_str.startswith("{") or not json_str.endswith("}"):
+        # Attempt to find the first and last curly brace to isolate the JSON
+        first_brace = json_str.find("{")
+        last_brace = json_str.rfind("}")
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            json_str = json_str[first_brace : last_brace + 1]
+        else:
+            logging.error(f"Could not find a valid JSON object in the response. Raw text: '{json_str}'")
+            raise ValueError("Invalid JSON format")
+
+    if not json_str:
+        logging.error(f"Extracted JSON string is empty after stripping. Raw text: '{text}'")
+        raise ValueError("Empty JSON string")
+
     extracted_data = json.loads(json_str)
 
     # Basic schema validation
