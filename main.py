@@ -30,7 +30,6 @@ Relationships should connect two entities by their IDs. The relationship object 
 IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
 
 Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations. Make sure the output is a single valid JSON object, and nothing else.
-Example JSON: {{"entities": [{{"id": "ent1", "type": "Person", "properties": {{"name": "John Doe"}}}}], "relationships": []}}
 """),
     ("user", """TEXT:
 ---
