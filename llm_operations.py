@@ -8,12 +8,12 @@ class LLMOperations:
         self.llm_text = llm_text
         self.embedding_service_url = Config.EMBEDDING_SERVICE_URL
 
-    def generate_embeddings(self, extracted_data):
+    def generate_embeddings(self, data):
         if not self.embedding_service_url:
             raise ValueError("EMBEDDING_SERVICE_URL is not set in Config.")
 
-        # Assuming extracted_data is a list of dictionaries, and each dictionary has a 'text' key
-        texts_to_embed = [item['text'] for item in extracted_data]
+        entities = data.get("entities", [])
+        texts_to_embed = [item['text'] for item in entities]
 
         headers = {"Content-Type": "application/json"}
         payload = {"texts": texts_to_embed}
