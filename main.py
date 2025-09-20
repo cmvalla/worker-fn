@@ -11,6 +11,7 @@ from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from google.cloud import pubsub_v1
+import google.auth
 import functions_framework
 from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
