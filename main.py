@@ -17,8 +17,8 @@ from google.cloud import logging as cloud_logging
 import google.cloud.secretmanager as secretmanager
 from google.cloud import storage
 from typing import List
-from config import Config
-from llm_operations import LLMOperations
+from .config import Config
+from .llm_operations import LLMOperations
 
 
 
@@ -286,10 +286,11 @@ def worker(request):
 
         # 4. Call the model to extract knowledge from the original text_chunk
         extracted_data = invoke_llm_with_retry(text_chunk, llm_json)
-        logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}")
+        logging.info(f"Extracted data from LLM: {json.dumps(extracted_data)}") # Add this
 
         # Generate embeddings for the extracted data
         extracted_data = llm_ops.generate_embeddings(extracted_data)
+        logging.info(f"Data after embedding generation: {json.dumps(extracted_data)}") # Add this
 
         # Normalize the entity ID key from '_id' to 'id' to handle LLM inconsistencies
         for entity in extracted_data.get("entities", []):

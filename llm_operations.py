@@ -2,11 +2,12 @@ import os
 import json
 import requests
 import logging
-from config import Config
+from .config import Config
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_vertexai.chat_models import ChatVertexAI
 import google.auth
 import google.auth.transport.requests
+import google.oauth2.id_token
 
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
@@ -78,23 +79,52 @@ class LLMOperations:
             batch_entity_ids = all_entity_ids[i:i + batch_size]
             batch_texts = [texts_to_embed_map[eid] for eid in batch_entity_ids]
             
-            # Call the embedding service
-            credentials, project = google.auth.default()
-            logging.info(f"Using embedding service URL as audience: {self.embedding_service_url}")
-            authed_session = google.auth.transport.requests.AuthorizedSession(credentials, audience=self.embedding_service_url)
-            
-            headers = {"Content-Type": "application/json"}
+            # Explicitly get an ID token for the Cloud Run service
+            auth_req = google.auth.transport.requests.Request()
+            id_token = google.oauth2.id_token.fetch_id_token(auth_req, self.embedding_service_url)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {id_token}"
+            }
             payload = {"texts": batch_texts}
+            
             try:
-                response = authed_session.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
+                response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
+                logging.info(f"Embedding service response status: {response.status_code} {response.reason}")
                 response.raise_for_status()  # Raise an exception for HTTP errors
-                batch_embeddings = response.json()
+                
+                raw_response_text = response.text
+                logging.info(f"Raw embedding service response text: {raw_response_text}")
+                batch_embeddings_response = response.json()
+                logging.info(f"Embedding service response (raw JSON): {batch_embeddings_response}")
+
+                # Extract the dictionary of embedding types
+                all_embeddings_by_type = batch_embeddings_response.get("embeddings", {})
+
+                if not all_embeddings_by_type:
+                    logging.error(f"No embeddings found in the response: {batch_embeddings_response}")
+                    raise ValueError("No embeddings found in the response")
+
+                semantic_search_embeddings = all_embeddings_by_type.get("semantic_search", [])
+                clustering_embeddings = all_embeddings_by_type.get("clustering", [])
 
                 for j, entity_id in enumerate(batch_entity_ids):
                     original_index = entity_id_to_index[entity_id]
-                    # Assuming the embedding service returns a list of dictionaries with 'clustering' and 'semantic_search' keys
-                    entities[original_index]['cluster_embedding'] = batch_embeddings[j]['clustering']
-                    entities[original_index]['embedding'] = batch_embeddings[j]['semantic_search']
+                    
+                    # Assign semantic_search embedding
+                    if j < len(semantic_search_embeddings):
+                        entities[original_index]['embedding'] = semantic_search_embeddings[j]
+                    else:
+                        logging.warning(f"Semantic search embedding not found for entity {entity_id}. Assigning zero embedding.")
+                        entities[original_index]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
+
+                    # Assign clustering embedding
+                    if j < len(clustering_embeddings):
+                        entities[original_index]['cluster_embedding'] = clustering_embeddings[j]
+                    else:
+                        logging.warning(f"Clustering embedding not found for entity {entity_id}. Assigning zero embedding.")
+                        entities[original_index]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error calling embedding service for batch: {e}")
                 # Assign default zero embeddings on error

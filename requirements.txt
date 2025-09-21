@@ -8,3 +8,5 @@ nltk
 langchain-google-vertexai
 langchain
 python-igraph
+pytest
+flask
