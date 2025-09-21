@@ -104,6 +104,10 @@ resource "google_cloud_run_v2_service" "worker" {
         name = "GEMINI_API_KEY"
         value = data.google_secret_manager_secret_version.gemini_api_key.secret_data
       }
+      env {
+        name = "LOG_LEVEL"
+        value = "INFO"
+      }
     }
   }
 }
