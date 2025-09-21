@@ -396,6 +396,8 @@ def create_igraph_from_extracted_data(extracted_data: Dict[str, Any]) -> ig.Grap
     for entity in extracted_data.get("entities", []):
         vertex = graph.add_vertex(name=entity["id"])
         for prop_key, prop_value in entity.get("properties", {}).items():
+            prop_key: str = prop_key
+            prop_value: Any = prop_value
             vertex[prop_key] = prop_value
         vertex["type"] = entity["type"] # Store entity type as a vertex attribute
         entity_id_to_vertex_index[entity["id"]] = vertex.index
@@ -408,6 +410,8 @@ def create_igraph_from_extracted_data(extracted_data: Dict[str, Any]) -> ig.Grap
         if source_id in entity_id_to_vertex_index and target_id in entity_id_to_vertex_index:
             edge = graph.add_edge(entity_id_to_vertex_index[source_id], entity_id_to_vertex_index[target_id])
             for prop_key, prop_value in rel.get("properties", {}).items():
+                prop_key: str = prop_key
+                prop_value: Any = prop_value
                 edge[prop_key] = prop_value
             edge["type"] = rel["type"] # Store relationship type as an edge attribute
         else:

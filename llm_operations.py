@@ -2,6 +2,7 @@ import json
 import requests
 import logging
 from typing import Any, Dict, List, Optional
+from typing import Optional
 from .config import Config
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_vertexai.chat_models import ChatVertexAI # Keep this for type hinting, even if not directly instantiated here
