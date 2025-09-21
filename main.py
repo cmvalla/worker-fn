@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 from .config import Config
 from .llm_operations import LLMOperations
 
+logging.basicConfig(level=logging.DEBUG)
+
 
 
 # --- Prompt Templates for Langchain ---
