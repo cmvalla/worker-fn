@@ -90,7 +90,7 @@ class LLMOperations:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {id_token}"
             }
-            payload: Dict[str, List[str]] = {"texts": batch_texts}
+            payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}"}
             
             try:
                 response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
