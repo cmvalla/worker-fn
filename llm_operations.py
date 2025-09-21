@@ -9,6 +9,7 @@ from langchain_google_vertexai.chat_models import ChatVertexAI # Keep this for t
 import google.auth
 import google.auth.transport.requests
 import google.oauth2.id_token
+import uuid
 
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
