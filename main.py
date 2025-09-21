@@ -289,49 +289,49 @@ def worker(request: Any) -> tuple[str, int]:
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk
-    extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
-    logging.debug(f"Raw extracted data from LLM: {json.dumps(extracted_data, indent=2)}")
+        extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
+        logging.debug(f"Raw extracted data from LLM: {json.dumps(extracted_data, indent=2)}")
 
-    # Generate embeddings for the extracted data
-    extracted_data = llm_ops.generate_embeddings(extracted_data)
-    logging.debug(f"Data after embedding generation: {json.dumps(extracted_data, indent=2)}")
+        # Generate embeddings for the extracted data
+        extracted_data = llm_ops.generate_embeddings(extracted_data)
+        logging.debug(f"Data after embedding generation: {json.dumps(extracted_data, indent=2)}")
 
-    # 3. Normalize entity IDs
-    extracted_data = normalize_entity_ids(extracted_data)
-    logging.debug(f"Data after entity ID normalization: {json.dumps(extracted_data, indent=2)}")
+        # 3. Normalize entity IDs
+        extracted_data = normalize_entity_ids(extracted_data)
+        logging.debug(f"Data after entity ID normalization: {json.dumps(extracted_data, indent=2)}")
 
-    # 4. Assign weights to relationships
-    for rel in extracted_data.get("relationships", []):
-        if "properties" not in rel:
-            rel["properties"] = {}
-        confidence: Optional[float] = rel["properties"].get("confidence")
-        if confidence is not None and 0.0 <= confidence <= 1.0:
-            rel["properties"]["weight"] = float(confidence)
-        else:
-            rel["properties"]["weight"] = 1.0 # Default weight if confidence is not provided or invalid
-    logging.debug(f"Data after relationship weight assignment: {json.dumps(extracted_data, indent=2)}")
+        # 4. Assign weights to relationships
+        for rel in extracted_data.get("relationships", []):
+            if "properties" not in rel:
+                rel["properties"] = {}
+            confidence: Optional[float] = rel["properties"].get("confidence")
+            if confidence is not None and 0.0 <= confidence <= 1.0:
+                rel["properties"]["weight"] = float(confidence)
+            else:
+                rel["properties"]["weight"] = 1.0 # Default weight if confidence is not provided or invalid
+        logging.debug(f"Data after relationship weight assignment: {json.dumps(extracted_data, indent=2)}")
 
-    logging.debug(f"Before adding Chunk entity and community: {json.dumps(extracted_data, indent=2)}")
-    # 5. Add the "Chunk" entity to the extracted entities
-    extracted_data["entities"].append(chunk_entity)
+        logging.debug(f"Before adding Chunk entity and community: {json.dumps(extracted_data, indent=2)}")
+        # 5. Add the "Chunk" entity to the extracted entities
+        extracted_data["entities"].append(chunk_entity)
 
-    # 6. Add the "Community" entity for the chunk
-    extracted_data["entities"].append(chunk_community_entity)
-    logging.debug(f"After adding Chunk entity and community: {json.dumps(extracted_data, indent=2)}")
+        # 6. Add the "Community" entity for the chunk
+        extracted_data["entities"].append(chunk_community_entity)
+        logging.debug(f"After adding Chunk entity and community: {json.dumps(extracted_data, indent=2)}")
 
-    # 7. Create relationships from extracted entities to the "Chunk" entity
-    logging.debug(f"Before creating relationships to Chunk entity: {json.dumps(extracted_data, indent=2)}")
-    for entity in extracted_data["entities"]:
-        # Avoid creating a relationship from the chunk entity to itself
-        if entity["id"] != chunk_entity["id"]:
-            extracted_data["relationships"].append({
-                "source": entity["id"],
-                "target": chunk_entity["id"],
-                "type": "PART_OF",
-                "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
-            })
-    logging.debug(f"After creating relationships to Chunk entity: {json.dumps(extracted_data, indent=2)}")
-    # 8. Create igraph, serialize, and store in GCS
+        # 7. Create relationships from extracted entities to the "Chunk" entity
+        logging.debug(f"Before creating relationships to Chunk entity: {json.dumps(extracted_data, indent=2)}")
+        for entity in extracted_data["entities"]:
+            # Avoid creating a relationship from the chunk entity to itself
+            if entity["id"] != chunk_entity["id"]:
+                extracted_data["relationships"].append({
+                    "source": entity["id"],
+                    "target": chunk_entity["id"],
+                    "type": "PART_OF",
+                    "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
+                })
+        logging.debug(f"After creating relationships to Chunk entity: {json.dumps(extracted_data, indent=2)}")
+        # 8. Create igraph, serialize, and store in GCS
         graph: ig.Graph = create_igraph_from_extracted_data(extracted_data)
         serialized_graph: bytes = pickle.dumps(graph)
 
