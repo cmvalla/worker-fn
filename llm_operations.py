@@ -49,19 +49,18 @@ class LLMOperations:
             if entity_type == 'Chunk':
                 text_to_embed = properties.get('summary', '')
                 if not text_to_embed:
-                    logging.debug(f"Chunk {entity_id} has an empty summary. Generating a new one.")
+                    logging.warning(f"Chunk {entity_id} has an empty summary. Generating a new one.")
                     original_text: str = properties.get('original_text', '')
                     if original_text:
-                        summary_response_content: Any = summarization_chain.invoke({"text_chunk": original_text}).content
                         summary: str = str(summary_response_content) if not isinstance(summary_response_content, list) else "".join(map(str, summary_response_content))
                         properties['summary'] = summary
                         text_to_embed = summary
                     else:
-                        logging.debug(f"Chunk {entity_id} also has no original_text to generate a summary from.")
+                        logging.warning(f"Chunk {entity_id} also has no original_text to generate a summary from.")
             elif entity_type == 'Community':
                 text_to_embed = properties.get('summary', '')
                 if not text_to_embed:
-                    logging.debug(f"Community {entity_id} has an empty summary. No embedding will be generated.")
+                    logging.warning(f"Community {entity_id} has an empty summary. No embedding will be generated.")
             else:
                 text_to_embed = f"Type: {entity_type}, Properties: {json.dumps(properties)}"
 
@@ -69,7 +68,7 @@ class LLMOperations:
                 texts_to_embed_map[entity_id] = text_to_embed
                 entity_id_to_index[entity_id] = i
             else:
-                logging.debug(f"Skipping embedding for entity {entity_id} because there is no text to embed.")
+                logging.warning(f"Skipping embedding for entity {entity_id} because there is no text to embed.")
                 # Assign default zero embeddings if no text to embed
                 entities[i]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
                 entities[i]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
@@ -120,14 +119,14 @@ class LLMOperations:
                     if j < len(semantic_search_embeddings):
                         entities[original_index]['embedding'] = semantic_search_embeddings[j]
                     else:
-                        logging.debug(f"Semantic search embedding not found for entity {entity_id}. Assigning zero embedding.")
+                        logging.warning(f"Semantic search embedding not found for entity {entity_id}. Assigning zero embedding.")
                         entities[original_index]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
 
                     # Assign clustering embedding
                     if j < len(clustering_embeddings):
                         entities[original_index]['cluster_embedding'] = clustering_embeddings[j]
                     else:
-                        logging.debug(f"Clustering embedding not found for entity {entity_id}. Assigning zero embedding.")
+                        logging.warning(f"Clustering embedding not found for entity {entity_id}. Assigning zero embedding.")
                         entities[original_index]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error calling embedding service for batch: {e}")
