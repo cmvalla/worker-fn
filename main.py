@@ -338,6 +338,14 @@ def worker(request: Any) -> tuple[str, int]:
         extracted_data["entities"].append(chunk_entity)
 
         # 6. Add the "Community" entity for the chunk
+        chunk_community_entity: Dict[str, Any] = {
+            "id": f"community-{batch_id}",
+            "type": "Community",
+            "properties": {
+                "name": f"Community for batch {batch_id}",
+                "description": f"Community entity representing the batch {batch_id} of processed chunks."
+            }
+        }
         extracted_data["entities"].append(chunk_community_entity)
         logging.debug(f"After adding Chunk entity and community: {json.dumps(extracted_data)}")
 
