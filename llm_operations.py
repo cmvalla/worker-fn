@@ -90,27 +90,22 @@ class LLMOperations:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {id_token}"
             }
-            payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}"}
-            
             try:
-                response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
-                logging.info(f"Embedding service response status: {response.status_code} {response.reason}")
-                response.raise_for_status()  # Raise an exception for HTTP errors
-                
-                raw_response_text: str = response.text
-                logging.info(f"Raw embedding service response text: {raw_response_text}")
-                batch_embeddings_response: Dict[str, Any] = response.json()
-                logging.info(f"Embedding service response (raw JSON): {batch_embeddings_response}")
+                # Make a separate call for semantic_search embeddings
+                semantic_payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}", "embedding_types": ["semantic_search"]}
+                semantic_response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(semantic_payload))
+                logging.info(f"Semantic embedding service response status: {semantic_response.status_code} {semantic_response.reason}")
+                semantic_response.raise_for_status()
+                semantic_embeddings_response: Dict[str, Any] = semantic_response.json()
+                semantic_search_embeddings: List[List[float]] = semantic_embeddings_response.get("embeddings", {}).get("semantic_search", [])
 
-                # Extract the dictionary of embedding types
-                all_embeddings_by_type: Dict[str, List[List[float]]] = batch_embeddings_response.get("embeddings", {})
-
-                if not all_embeddings_by_type:
-                    logging.error(f"No embeddings found in the response: {batch_embeddings_response}")
-                    raise ValueError("No embeddings found in the response")
-
-                semantic_search_embeddings: List[List[float]] = all_embeddings_by_type.get("semantic_search", [])
-                clustering_embeddings: List[List[float]] = all_embeddings_by_type.get("clustering", [])
+                # Make a separate call for clustering embeddings
+                clustering_payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}", "embedding_types": ["clustering"]}
+                clustering_response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(clustering_payload))
+                logging.info(f"Clustering embedding service response status: {clustering_response.status_code} {clustering_response.reason}")
+                clustering_response.raise_for_status()
+                clustering_embeddings_response: Dict[str, Any] = clustering_response.json()
+                clustering_embeddings: List[List[float]] = clustering_embeddings_response.get("embeddings", {}).get("clustering", [])
 
                 for j, entity_id in enumerate(batch_entity_ids):
                     original_index = entity_id_to_index[entity_id]
