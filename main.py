@@ -194,6 +194,28 @@ def clean_text(text: str) -> str:
     text = ' '.join(text.split())
     return text
 
+def clean_text(text: str) -> str:
+    '''
+    Cleans the input text by removing HTML tags, special characters,
+    and converting it to lowercase.
+    '''
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # Convert to lowercase
+    text = text.lower()
+    # Remove extra whitespace
+    text = ' '.join(text.split())
+    return text
+
+def normalize_entity_ids(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Placeholder function for normalizing entity IDs. 
+    This function should ensure entity IDs are consistent and unique.
+    """
+    logging.warning("normalize_entity_ids is a placeholder and does not perform any normalization.")
+    return data
+
 @functions_framework.http
 def worker(request: Any) -> tuple[str, int]:
     # --- Environment Variables -- -
