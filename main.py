@@ -180,18 +180,7 @@ def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: 
 
         return data
 
-def clean_text(text: str) -> str:
-    '''
-    Cleans the input text by removing HTML tags, special characters,
-    and converting it to lowercase.
-    '''
-    # Remove HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
 
-    # Convert to lowercase
-    text = text.lower()
-    # Remove extra whitespace
-    text = ' '.join(text.split())
 
 
 def normalize_entity_ids(data: Dict[str, Any]) -> Dict[str, Any]:
