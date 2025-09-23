@@ -192,21 +192,7 @@ def clean_text(text: str) -> str:
     text = text.lower()
     # Remove extra whitespace
     text = ' '.join(text.split())
-    return text
 
-def clean_text(text: str) -> str:
-    '''
-    Cleans the input text by removing HTML tags, special characters,
-    and converting it to lowercase.
-    '''
-    # Remove HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
-
-    # Convert to lowercase
-    text = text.lower()
-    # Remove extra whitespace
-    text = ' '.join(text.split())
-    return text
 
 def normalize_entity_ids(data: Dict[str, Any]) -> Dict[str, Any]:
     """

@@ -52,7 +52,8 @@ class LLMOperations:
                     logging.warning(f"Chunk {entity_id} has an empty summary. Generating a new one.")
                     original_text: str = properties.get('original_text', '')
                     if original_text:
-                        summary: str = str(summary_response_content) if not isinstance(summary_response_content, list) else "".join(map(str, summary_response_content))
+                        summary_response = summarization_chain.invoke({"text_chunk": original_text})
+                        summary: str = str(summary_response.content) if not isinstance(summary_response.content, list) else "".join(map(str, summary_response.content))
                         properties['summary'] = summary
                         text_to_embed = summary
                     else:
