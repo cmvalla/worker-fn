@@ -369,6 +369,20 @@ def worker(request: Any) -> tuple[str, int]:
 
         logging.info(f"Published message with GCS path for batch {batch_id}, chunk {chunk_number} to topic {topic_path}.")
 
+        # Final logging of counts
+        num_entities = len(extracted_data.get("entities", []))
+        num_relationships = len(extracted_data.get("relationships", []))
+        
+        num_clustering_embeddings = 0
+        num_semantic_embeddings = 0
+        for entity in extracted_data.get("entities", []):
+            if entity.get("cluster_embedding") and any(e != 0.0 for e in entity["cluster_embedding"]):
+                num_clustering_embeddings += 1
+            if entity.get("embedding") and any(e != 0.0 for e in entity["embedding"]):
+                num_semantic_embeddings += 1
+
+        logging.info(f"Worker final counts for batch {batch_id}: Entities={num_entities}, Relationships={num_relationships}, ClusteringEmbeddings={num_clustering_embeddings}, SemanticEmbeddings={num_semantic_embeddings}")
+
         return "OK", 200
 
     except Exception as e:
