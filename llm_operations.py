@@ -68,11 +68,6 @@ class LLMOperations:
             if text_to_embed:
                 texts_to_embed_map[entity_id] = text_to_embed
                 entity_id_to_index[entity_id] = i
-            else:
-                logging.warning(f"Skipping embedding for entity {entity_id} because there is no text to embed.")
-                # Assign default zero embeddings if no text to embed
-                entities[i]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
-                entities[i]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
 
         # Batching logic
         batch_size: int = 50 # Define a suitable batch size
