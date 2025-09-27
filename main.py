@@ -401,6 +401,10 @@ def create_igraph_from_extracted_data(extracted_data: Dict[str, Any]) -> ig.Grap
             prop_value: Any = prop_value
             vertex[prop_key] = prop_value
         vertex["type"] = entity["type"] # Store entity type as a vertex attribute
+        if "embedding" in entity:
+            vertex["embedding"] = entity["embedding"]
+        if "cluster_embedding" in entity:
+            vertex["cluster_embedding"] = entity["cluster_embedding"]
         entity_id_to_vertex_index[entity["id"]] = vertex.index
 
     # Add edges
