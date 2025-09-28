@@ -1,8 +1,9 @@
 import json
 import requests
 import logging
+import time
+import random
 from typing import Any, Dict, List, Optional
-from typing import Optional
 from .config import Config
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_vertexai.chat_models import ChatVertexAI # Keep this for type hinting, even if not directly instantiated here
@@ -14,13 +15,13 @@ import uuid
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
     ("system", "Summarize the following text in one concise sentence:"),
-    ("user", """TEXT:
+    ("user", '''TEXT:
 ---
 {text_chunk}
 ---
 
 Summary:
-""")
+''')
 ])
 
 class LLMOperations:
@@ -49,25 +50,42 @@ class LLMOperations:
             if entity_type == 'Chunk':
                 text_to_embed = properties.get('summary', '')
                 if not text_to_embed:
-                    logging.warning(f"Chunk {entity_id} has an empty summary. Generating a new one.")
+                    logging.warning(f"Chunk {entity_id} has an empty summary. Attempting to generate a new one with retries.")
                     original_text: str = properties.get('original_text', '')
                     if original_text:
-                        summary_response = summarization_chain.invoke({"text_chunk": original_text})
-                        summary: str = str(summary_response.content) if not isinstance(summary_response.content, list) else "".join(map(str, summary_response.content))
-                        properties['summary'] = summary
-                        text_to_embed = summary
+                        for attempt in range(5):
+                            try:
+                                summary_response = summarization_chain.invoke({"text_chunk": original_text})
+                                summary: str = str(summary_response.content) if not isinstance(summary_response.content, list) else "".join(map(str, summary_response.content))
+                                if summary:
+                                    properties['summary'] = summary
+                                    text_to_embed = summary
+                                    logging.info(f"Successfully generated summary for Chunk {entity_id} on attempt {attempt + 1}.")
+                                    break
+                            except Exception as e:
+                                logging.warning(f"Attempt {attempt + 1} to generate summary for Chunk {entity_id} failed: {e}")
+                            
+                            if attempt < 4:
+                                backoff_time = min(1 * (2 ** attempt) + random.uniform(0, 1), 300)
+                                logging.info(f"Retrying in {backoff_time:.2f} seconds...")
+                                time.sleep(backoff_time)
+                        
+                        if not text_to_embed:
+                            logging.error(f"Failed to generate summary for Chunk {entity_id} after 5 attempts.")
                     else:
                         logging.warning(f"Chunk {entity_id} also has no original_text to generate a summary from.")
             elif entity_type == 'Community':
                 text_to_embed = properties.get('summary', '')
                 if not text_to_embed:
-                    logging.warning(f"Community {entity_id} has an empty summary. No embedding will be generated.")
+                    logging.warning(f"Community {entity_id} has an empty summary. No embedding will be generated as there is no text to summarize in the worker.")
             else:
                 text_to_embed = f"Type: {entity_type}, Properties: {json.dumps(properties)}"
 
             if text_to_embed:
                 texts_to_embed_map[entity_id] = text_to_embed
                 entity_id_to_index[entity_id] = i
+            else:
+                logging.warning(f"Skipping embedding for entity {entity_id} because there is no text to embed.")
 
         # Batching logic
         batch_size: int = 50 # Define a suitable batch size
@@ -87,21 +105,15 @@ class LLMOperations:
                 "Authorization": f"Bearer {id_token}"
             }
             try:
-                # Make a separate call for semantic_search embeddings
-                semantic_payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}", "embedding_types": ["semantic_search"]}
-                semantic_response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(semantic_payload))
-                logging.info(f"Semantic embedding service response status: {semantic_response.status_code} {semantic_response.reason}")
-                semantic_response.raise_for_status()
-                semantic_embeddings_response: Dict[str, Any] = semantic_response.json()
-                semantic_search_embeddings: List[List[float]] = semantic_embeddings_response.get("embeddings", {}).get("semantic_search", [])
-
-                # Make a separate call for clustering embeddings
-                clustering_payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}", "embedding_types": ["clustering"]}
-                clustering_response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(clustering_payload))
-                logging.info(f"Clustering embedding service response status: {clustering_response.status_code} {clustering_response.reason}")
-                clustering_response.raise_for_status()
-                clustering_embeddings_response: Dict[str, Any] = clustering_response.json()
-                clustering_embeddings: List[List[float]] = clustering_embeddings_response.get("embeddings", {}).get("clustering", [])
+                # Make a single call for both semantic_search and clustering embeddings
+                payload: Dict[str, Any] = {"texts": batch_texts, "invocation_id": f"worker-{uuid.uuid4().hex}", "embedding_types": ["semantic_search", "clustering"]}
+                response = requests.post(self.embedding_service_url, headers=headers, data=json.dumps(payload))
+                logging.info(f"Embedding service response status: {response.status_code} {response.reason}")
+                response.raise_for_status()
+                embeddings_response: Dict[str, Any] = response.json()
+                
+                semantic_search_embeddings: List[List[float]] = embeddings_response.get("embeddings", {}).get("semantic_search", [])
+                clustering_embeddings: List[List[float]] = embeddings_response.get("embeddings", {}).get("clustering", [])
 
                 for j, entity_id in enumerate(batch_entity_ids):
                     original_index = entity_id_to_index[entity_id]
@@ -110,21 +122,14 @@ class LLMOperations:
                     if j < len(semantic_search_embeddings):
                         entities[original_index]['embedding'] = semantic_search_embeddings[j]
                     else:
-                        logging.warning(f"Semantic search embedding not found for entity {entity_id}. Assigning zero embedding.")
-                        entities[original_index]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
+                        logging.warning(f"Semantic search embedding not found for entity {entity_id}.")
 
                     # Assign clustering embedding
                     if j < len(clustering_embeddings):
                         entities[original_index]['cluster_embedding'] = clustering_embeddings[j]
                     else:
-                        logging.warning(f"Clustering embedding not found for entity {entity_id}. Assigning zero embedding.")
-                        entities[original_index]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
+                        logging.warning(f"Clustering embedding not found for entity {entity_id}.")
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error calling embedding service for batch: {e}")
-                # Assign default zero embeddings on error
-                for entity_id in batch_entity_ids:
-                    original_index = entity_id_to_index[entity_id]
-                    entities[original_index]['cluster_embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
-                    entities[original_index]['embedding'] = [0.0] * Config.EMBEDDING_DIMENSION
                 
         return data
