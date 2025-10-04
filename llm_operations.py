@@ -75,9 +75,9 @@ class LLMOperations:
                     else:
                         logging.warning(f"Chunk {entity_id} also has no original_text to generate a summary from.")
             elif entity_type == 'Community':
-                text_to_embed = properties.get('summary', '')
+                text_to_embed = properties.get('description', '')
                 if not text_to_embed:
-                    logging.warning(f"Community {entity_id} has an empty summary. No embedding will be generated as there is no text to summarize in the worker.")
+                    logging.warning(f"Community {entity_id} has an empty description. No embedding will be generated as there is no text to summarize in the worker.")
             else:
                 text_to_embed = f"Type: {entity_type}, Properties: {json.dumps(properties)}"
 
