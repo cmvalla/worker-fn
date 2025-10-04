@@ -85,7 +85,7 @@ class LLMOperations:
                 texts_to_embed_map[entity_id] = text_to_embed
                 entity_id_to_index[entity_id] = i
             else:
-                logging.warning(f"Skipping embedding for entity {entity_id} because there is no text to embed.")
+                logging.warning(f"Skipping embedding for entity {entity_id} because there is no text to embed. Text to embed was: '{text_to_embed}'")
 
         # Batching logic
         batch_size: int = 50 # Define a suitable batch size
