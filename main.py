@@ -389,9 +389,8 @@ def worker(request: Any) -> tuple[str, int]:
                     "properties": {"weight": 1, "description": "Indicates that an extracted entity is part of a specific text chunk."}
                 })
         logging.debug(f"After creating relationships to Chunk entity: {json.dumps(extracted_data)}")
-        # 8. Create igraph, serialize, and store in GCS
-        graph: ig.Graph = create_igraph_from_extracted_data(extracted_data)
-        serialized_graph: bytes = pickle.dumps(graph)
+        # 8. Serialize extracted_data to JSON and store in GCS
+        serialized_data: bytes = json.dumps(extracted_data).encode("utf-8")
 
         # Generate a unique object name for the GCS blob
         timestamp: int = int(time.time())
@@ -441,38 +440,3 @@ def worker(request: Any) -> tuple[str, int]:
     except Exception as e:
         logging.error(f"An unexpected error occurred in worker for batch '{batch_id}': {e}", exc_info=True)
         return "Internal Server Error", 500
-
-def create_igraph_from_extracted_data(extracted_data: Dict[str, Any]) -> ig.Graph:
-    graph: ig.Graph = ig.Graph()
-    
-    # Add vertices
-    entity_id_to_vertex_index: Dict[str, int] = {}
-    for entity in extracted_data.get("entities", []):
-        vertex = graph.add_vertex(name=entity["id"])
-        for prop_key, prop_value in entity.get("properties", {}).items():
-            prop_key: str = prop_key
-            prop_value: Any = prop_value
-            vertex[prop_key] = prop_value
-        vertex["type"] = entity["type"] # Store entity type as a vertex attribute
-        if "embedding" in entity:
-            vertex["embedding"] = entity["embedding"]
-        if "cluster_embedding" in entity:
-            vertex["cluster_embedding"] = entity["cluster_embedding"]
-        entity_id_to_vertex_index[entity["id"]] = vertex.index
-
-    # Add edges
-    for rel in extracted_data.get("relationships", []):
-        source_id: str = rel["source"]
-        target_id: str = rel["target"]
-        
-        if source_id in entity_id_to_vertex_index and target_id in entity_id_to_vertex_index:
-            edge = graph.add_edge(entity_id_to_vertex_index[source_id], entity_id_to_vertex_index[target_id])
-            for prop_key, prop_value in rel.get("properties", {}).items():
-                prop_key: str = prop_key
-                prop_value: Any = prop_value
-                edge[prop_key] = prop_value
-            edge["type"] = rel["type"] # Store relationship type as an edge attribute
-        else:
-            logging.warning(f"Skipping relationship due to missing source or target entity: {rel}")
-            
-    return graph
