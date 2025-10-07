@@ -303,9 +303,40 @@ def worker(request: Any) -> tuple[str, int]:
             }
         }
 
-        # 4. Call the model to extract knowledge from the original text_chunk
-        extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
-        logging.debug(f"Raw extracted data from LLM: {json.dumps(extracted_data)}")
+        # 4. Call the model to extract knowledge from the original text_chunk 3 times
+        all_extracted_data = []
+        for i in range(3):
+            logging.info(f"LLM extraction attempt {i+1}/3")
+            extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
+            all_extracted_data.append(extracted_data)
+            logging.debug(f"Raw extracted data from LLM attempt {i+1}: {json.dumps(extracted_data)}")
+
+        # Merge the 3 extractions
+        merged_entities = {}
+        merged_relationships = []
+        
+        for data in all_extracted_data:
+            for entity in data.get("entities", []):
+                if entity["id"] not in merged_entities:
+                    merged_entities[entity["id"]] = entity
+            
+            for rel in data.get("relationships", []):
+                # Check for duplicates
+                is_duplicate = False
+                for merged_rel in merged_relationships:
+                    if (merged_rel["source"] == rel["source"] and
+                        merged_rel["target"] == rel["target"] and
+                        merged_rel["type"] == rel["type"]):
+                        is_duplicate = True
+                        break
+                if not is_duplicate:
+                    merged_relationships.append(rel)
+
+        extracted_data = {
+            "entities": list(merged_entities.values()),
+            "relationships": merged_relationships
+        }
+        logging.info(f"Merged data from 3 LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
 
         # 3. Normalize entity IDs
         extracted_data = normalize_entity_ids(extracted_data)
