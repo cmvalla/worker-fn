@@ -303,40 +303,44 @@ def worker(request: Any) -> tuple[str, int]:
             }
         }
 
-        # 4. Call the model to extract knowledge from the original text_chunk 3 times
-        all_extracted_data = []
-        for i in range(3):
-            logging.info(f"LLM extraction attempt {i+1}/3")
-            extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
-            all_extracted_data.append(extracted_data)
-            logging.debug(f"Raw extracted data from LLM attempt {i+1}: {json.dumps(extracted_data)}")
+        # 4. Call the model to extract knowledge from the original text_chunk with deduplication and iterative merging
+        current_extracted_data: Dict[str, Any] = {"entities": [], "relationships": []}
+        previous_entity_count = 0
 
-        # Merge the 3 extractions
-        merged_entities = {}
-        merged_relationships = []
-        
-        for data in all_extracted_data:
-            for entity in data.get("entities", []):
-                if entity["id"] not in merged_entities:
-                    merged_entities[entity["id"]] = entity
+        for i in range(3): # Max 3 attempts
+            logging.info(f"LLM extraction attempt {i+1}/3")
+            new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
+            logging.debug(f"Raw extracted data from LLM attempt {i+1}: {json.dumps(new_extracted_data)}")
+
+            # Merge new_extracted_data into current_extracted_data
+            # Entities
+            for entity in new_extracted_data.get("entities", []):
+                if entity["id"] not in [e["id"] for e in current_extracted_data["entities"]]:
+                    current_extracted_data["entities"].append(entity)
             
-            for rel in data.get("relationships", []):
-                # Check for duplicates
+            # Relationships
+            for rel in new_extracted_data.get("relationships", []):
                 is_duplicate = False
-                for merged_rel in merged_relationships:
-                    if (merged_rel["source"] == rel["source"] and
-                        merged_rel["target"] == rel["target"] and
-                        merged_rel["type"] == rel["type"]):
+                for current_rel in current_extracted_data["relationships"]:
+                    if (current_rel["source"] == rel["source"] and
+                        current_rel["target"] == rel["target"] and
+                        current_rel["type"] == rel["type"]):
                         is_duplicate = True
                         break
                 if not is_duplicate:
-                    merged_relationships.append(rel)
+                    current_extracted_data["relationships"].append(rel)
+            
+            current_entity_count = len(current_extracted_data["entities"])
+            logging.info(f"After attempt {i+1}, current entities: {current_entity_count}, previous entities: {previous_entity_count}")
 
-        extracted_data = {
-            "entities": list(merged_entities.values()),
-            "relationships": merged_relationships
-        }
-        logging.info(f"Merged data from 3 LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
+            if i > 0 and current_entity_count <= previous_entity_count:
+                logging.info(f"Entity count did not increase. Stopping further LLM calls.")
+                break
+            
+            previous_entity_count = current_entity_count
+        
+        extracted_data = current_extracted_data
+        logging.info(f"Final merged data from LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
 
         # 3. Normalize entity IDs
         extracted_data = normalize_entity_ids(extracted_data)
