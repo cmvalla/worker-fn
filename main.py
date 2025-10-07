@@ -23,12 +23,30 @@ logging.basicConfig(level=logging.DEBUG)
 # --- Prompt Templates for Langchain ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
-From the text below, extract entities and their relationships. The entities should have a unique, descriptive ID (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner'), a type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.), and a set of properties (e.g., name, description, value, date, version, role, characteristics, purpose, etc.).
-For each entity, ensure its 'name' property retains the original language from the text. All other properties, such as 'description', 'value', 'role', etc., must be translated into English.
-Relationships should connect two entities by their IDs. The relationship object MUST have 'source' and 'target' fields, which are the IDs of the connected entities. It should also have a 'type' (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). For relationships, the 'type' property must also retain the original language from the text. For every single relationship you extract, you MUST provide a 'confidence' score between 0.0 and 1.0 in its properties. The confidence score should reflect how certain you are that the relationship is correctly stated in the text. A higher score means higher certainty.
-IMPORTANT: If a relationship has a specific date or time period of application, include it as a property of the relationship (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
+From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph.
 
-Respond ONLY with a single, valid JSON object containing two keys: "entities" and "relationships". Do not include any other text or explanations. Make sure the output is a single valid JSON object, and nothing else.
+**Entities:**
+- **ID:** Create a unique, descriptive ID for each entity (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner').
+- **Type:** Assign a specific type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.). Be as granular as possible.
+- **Properties:** Extract a comprehensive set of properties. This MUST include not only obvious attributes like 'name', 'date', or 'version', but also more nuanced details.
+  - **'name':** Must retain the original language from the text.
+  - **'description':** Provide a very detailed, verbose description of the entity, summarizing its context and any relevant information from the text. This should be in English.
+  - **'value', 'role', 'characteristics', 'purpose', etc.:** All other properties must be translated into English.
+- **Be exhaustive:** Identify and extract every single potential entity mentioned in the text. Do not omit any.
+
+**Relationships:**
+- **Connectivity:** Relationships must connect two entities by their IDs in the 'source' and 'target' fields.
+- **Type:** Assign a descriptive type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). The 'type' property must retain the original language from the text.
+- **Properties:**
+  - **'confidence':** For every single relationship, you MUST provide a 'confidence' score between 0.0 and 1.0, reflecting your certainty. A higher score means higher certainty.
+  - **'description':** Provide a detailed explanation of why this relationship exists, citing evidence from the text.
+  - **Temporal Information:** If a relationship is valid for a specific date or time period, include it as a property (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
+- **Be Verbose:** Create as many relationships as possible to capture all connections between entities. It is better to have a potentially redundant relationship than to miss a connection.
+
+**Output Format:**
+- Respond ONLY with a single, valid JSON object.
+- The JSON object must have two keys: "entities" and "relationships".
+- Do not include any other text, explanations, or markdown formatting. The output must be a single, raw JSON object.
 """),
     ("user", """TEXT:
 ---
