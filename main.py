@@ -145,7 +145,7 @@ def extract_json_from_response(text: str) -> Dict[str, Any]:
 
     return extracted_data
 
-def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5, prompt_template: Optional[ChatPromptTemplate] = None) -> Dict[str, Any]:
+def invoke_llm_with_retry(prompt_input: Dict[str, Any], llm_json: ChatVertexAI, max_retries: int = 5, prompt_template: Optional[ChatPromptTemplate] = None) -> Dict[str, Any]:
     
     current_prompt_template = prompt_template if prompt_template else EXTRACTION_PROMPT
     
@@ -153,18 +153,18 @@ def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: 
         try:
             logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
             extraction_chain = current_prompt_template | llm_json
-            llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
+            llm_response = extraction_chain.invoke(prompt_input)
             return extract_json_from_response(llm_response.content)
         except (json.JSONDecodeError, ValueError) as e:
             logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
             if attempt < max_retries - 1:
                 # Construct a correction prompt
-                correction_message = f"The previous JSON output was invalid: {e}. Please regenerate the JSON, ensuring it is valid and adheres to the specified schema. Original text: {text_chunk}. Invalid output: {llm_response.content if 'llm_response' in locals() else 'N/A'}"
+                correction_message = f"The previous JSON output was invalid: {e}. Please regenerate the JSON, ensuring it is valid and adheres to the specified schema. Original text: {prompt_input.get("text_chunk", "N/A")}. Invalid output: {llm_response.content if 'llm_response' in locals() else 'N/A'}"
                 
                 # Create a new prompt template for correction
                 correction_prompt_template = ChatPromptTemplate.from_messages([
                     ("system", correction_message),
-                    ("user", f"TEXT:\n---\n{text_chunk}\n---\n\nJSON:\n")
+                    ("user", f"TEXT:\n---\n{{text_chunk}}\n---\n\nJSON:\n")
                 ])
                 current_prompt_template = correction_prompt_template # Use the correction prompt for the next attempt
 
@@ -381,10 +381,16 @@ JSON:
 """)
             ])
 
+            # Prepare the input for the LLM call
+            llm_input = {
+                "text_chunk": sentence,
+                "previous_context": previous_full_text_context # Pass the full previous text context
+            }
+
             for i in range(3): # Max 3 attempts per sentence
                 logging.info(f"LLM extraction attempt {i+1}/3 for sentence {sentence_num + 1}")
-                # Pass the dynamically created prompt to invoke_llm_with_retry
-                new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(sentence, llm_json, prompt_template=sentence_extraction_prompt)
+                # Pass the dynamically created prompt and the input dictionary to invoke_llm_with_retry
+                new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(llm_input, llm_json, prompt_template=sentence_extraction_prompt)
                 logging.debug(f"Raw extracted data from LLM attempt {i+1} for sentence {sentence_num + 1}: {json.dumps(new_extracted_data)}")
 
                 # Merge new_extracted_data into current_sentence_extracted_data
