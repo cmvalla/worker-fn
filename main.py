@@ -46,8 +46,8 @@ From the text below, extract entities and their relationships with extreme detai
 - **Be exhaustive:** Identify and extract every single potential entity mentioned in the text. Do not omit any.
 
 **Relationships:**
-- **Connectivity:** Relationships must connect two entities by their IDs in the 'source' and 'target' fields.
-- **Type:** Assign a descriptive type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). The 'type' property must retain the original language from the text.
+- **Connectivity:** Relationships MUST connect two entities by their IDs in the 'source' and 'target' fields. These fields are MANDATORY.
+- **Type:** Assign a descriptive type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). The 'type' property is MANDATORY and must retain the original language from the text.
 - **Properties:**
   - **'confidence':** For every single relationship, you MUST provide a 'confidence' score between 0.0 and 1.0, reflecting your certainty. A higher score means higher certainty.
   - **'description':** Provide a detailed explanation of why this relationship exists, citing evidence from the text.
