@@ -340,8 +340,14 @@ def worker(request: Any) -> tuple[str, int]:
                 
                 # Relationships
                 for rel in new_extracted_data.get("relationships", []):
+                    if "type" not in rel:
+                        logging.warning(f"Skipping relationship due to missing 'type' key: {rel}")
+                        continue
                     is_duplicate = False
                     for current_rel in current_sentence_extracted_data["relationships"]:
+                        if "type" not in current_rel:
+                            logging.warning(f"Skipping existing relationship in comparison due to missing 'type' key: {current_rel}")
+                            continue
                         if (current_rel["source"] == rel["source"] and
                             current_rel["target"] == rel["target"] and
                             current_rel["type"] == rel["type"]):
