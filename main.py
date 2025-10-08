@@ -332,6 +332,9 @@ def worker(request: Any) -> tuple[str, int]:
                 # Merge new_extracted_data into current_sentence_extracted_data
                 # Entities
                 for entity in new_extracted_data.get("entities", []):
+                    if "id" not in entity:
+                        logging.warning(f"Skipping entity due to missing 'id' key: {entity}")
+                        continue
                     if entity["id"] not in [e["id"] for e in current_sentence_extracted_data["entities"]]:
                         current_sentence_extracted_data["entities"].append(entity)
                 
