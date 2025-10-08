@@ -34,6 +34,8 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
 From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph.
 
+{previous_context}
+
 **Entities:**
 - **ID:** Create a unique, descriptive ID for each entity (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner').
 - **Type:** Assign a specific type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.). Be as granular as possible.
@@ -130,8 +132,8 @@ def extract_json_from_response(text: str) -> Dict[str, Any]:
 
     return extracted_data
 
-def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5) -> Dict[str, Any]:
-    extraction_chain = EXTRACTION_PROMPT | llm_json
+def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5, prompt_template: Optional[ChatPromptTemplate] = None) -> Dict[str, Any]:
+    extraction_chain = (prompt_template if prompt_template else EXTRACTION_PROMPT) | llm_json
     
     for attempt in range(max_retries):
         try:
@@ -318,15 +320,46 @@ def worker(request: Any) -> tuple[str, int]:
         
         logging.info(f"Splitting text chunk into {len(sentences)} sentences.")
 
+        previous_full_text_context = ""
+
         for sentence_num, sentence in enumerate(sentences):
             logging.info(f"Processing sentence {sentence_num + 1}/{len(sentences)}: {sentence[:100]}...") # Log first 100 chars
             
             current_sentence_extracted_data: Dict[str, Any] = {"entities": [], "relationships": []}
             previous_entity_count = 0
 
+            # Construct the system message with previous context
+            system_message_with_context = """
+From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph.
+
+"""
+            if previous_full_text_context:
+                system_message_with_context += f"""
+Previous Context:
+---
+{previous_full_text_context}
+---
+
+Consider the entities and relationships already extracted from the previous context when extracting from the current sentence. Avoid duplicating entities or relationships that are clearly the same as those already identified. Focus on new information or new connections to existing entities.
+
+"""
+
+            # Create a new prompt template for each sentence to include the dynamic context
+            sentence_extraction_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_message_with_context),
+                ("user", """TEXT:
+---
+{text_chunk}
+---
+
+JSON:
+""")
+            ])
+
             for i in range(3): # Max 3 attempts per sentence
                 logging.info(f"LLM extraction attempt {i+1}/3 for sentence {sentence_num + 1}")
-                new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(sentence, llm_json)
+                # Pass the dynamically created prompt to invoke_llm_with_retry
+                new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(sentence, llm_json, prompt_template=sentence_extraction_prompt)
                 logging.debug(f"Raw extracted data from LLM attempt {i+1} for sentence {sentence_num + 1}: {json.dumps(new_extracted_data)}")
 
                 # Merge new_extracted_data into current_sentence_extracted_data
@@ -379,6 +412,9 @@ def worker(request: Any) -> tuple[str, int]:
                         break
                 if not is_duplicate:
                     extracted_data["relationships"].append(rel)
+
+            # Update previous_full_text_context with the current sentence
+            previous_full_text_context += sentence + " "
 
         logging.info(f"Final merged data from all LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
 
