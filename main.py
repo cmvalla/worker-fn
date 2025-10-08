@@ -82,7 +82,7 @@ Summary:
 def extract_json_from_response(text: str) -> Dict[str, Any]:
     '''
     Extracts a JSON object from the model's text response and performs basic validation.
-    Ensures the JSON contains "entities" and "relationships" keys.
+    Ensures the JSON contains "entities" and "relationships" keys, and that relationships have mandatory fields.
     '''
     # Try to find a JSON block enclosed in ```json ... ```
     match = re.search(r"```json\s*({.*})```", text, re.DOTALL | re.IGNORECASE)
@@ -128,26 +128,51 @@ def extract_json_from_response(text: str) -> Dict[str, Any]:
     # Basic schema validation
     if "entities" not in extracted_data or "relationships" not in extracted_data:
         logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
-        raise ValueError("Invalid JSON schema")
+        raise ValueError("Invalid JSON schema: missing 'entities' or 'relationships' key")
+
+    # Validate mandatory fields for relationships
+    for rel in extracted_data.get("relationships", []):
+        missing_fields = []
+        if "type" not in rel:
+            missing_fields.append("'type'")
+        if "source" not in rel:
+            missing_fields.append("'source'")
+        if "target" not in rel:
+            missing_fields.append("'target'")
+        
+        if missing_fields:
+            raise ValueError(f"Invalid JSON schema: relationship missing mandatory fields: {', '.join(missing_fields)}. Relationship: {rel}")
 
     return extracted_data
 
 def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5, prompt_template: Optional[ChatPromptTemplate] = None) -> Dict[str, Any]:
-    extraction_chain = (prompt_template if prompt_template else EXTRACTION_PROMPT) | llm_json
+    
+    current_prompt_template = prompt_template if prompt_template else EXTRACTION_PROMPT
     
     for attempt in range(max_retries):
         try:
             logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
+            extraction_chain = current_prompt_template | llm_json
             llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
             return extract_json_from_response(llm_response.content)
         except (json.JSONDecodeError, ValueError) as e:
             logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
             if attempt < max_retries - 1:
+                # Construct a correction prompt
+                correction_message = f"The previous JSON output was invalid: {e}. Please regenerate the JSON, ensuring it is valid and adheres to the specified schema. Original text: {text_chunk}. Invalid output: {llm_response.content if 'llm_response' in locals() else 'N/A'}"
+                
+                # Create a new prompt template for correction
+                correction_prompt_template = ChatPromptTemplate.from_messages([
+                    ("system", correction_message),
+                    ("user", f"TEXT:\n---\n{text_chunk}\n---\n\nJSON:\n")
+                ])
+                current_prompt_template = correction_prompt_template # Use the correction prompt for the next attempt
+
                 backoff_time = min(1 * (2 ** attempt) + random.uniform(0, 1), 300)
-                logging.info(f"Retrying in {backoff_time:.2f} seconds...")
+                logging.info(f"Retrying with correction in {backoff_time:.2f} seconds...")
                 time.sleep(backoff_time)
             else:
-                logging.error(f"Failed to get valid JSON after {max_retries} attempts.")
+                logging.error(f"Failed to get valid JSON after {max_retries} attempts, even with corrections.")
                 return {"entities": [], "relationships": []}
     return {"entities": [], "relationships": []} # Explicit return to satisfy type checker
 
