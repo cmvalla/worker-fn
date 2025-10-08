@@ -119,6 +119,30 @@ def extract_json_from_response(text: str) -> Dict[str, Any]:
         logging.error(f"Model output missing 'entities' or 'relationships' key. Raw text: '{json_str}'")
         raise ValueError("Invalid JSON schema")
 
+    valid_entities = []
+    for entity in extracted_data.get("entities", []):
+        if "id" not in entity:
+            logging.warning(f"Skipping entity due to missing 'id' key: {entity}")
+            continue
+        valid_entities.append(entity)
+    extracted_data["entities"] = valid_entities
+
+    valid_relationships = []
+    for rel in extracted_data.get("relationships", []):
+        missing_fields = []
+        if "type" not in rel:
+            missing_fields.append("'type'")
+        if "source" not in rel:
+            missing_fields.append("'source'")
+        if "target" not in rel:
+            missing_fields.append("'target'")
+        
+        if missing_fields:
+            logging.warning(f"Skipping relationship due to missing mandatory fields: {', '.join(missing_fields)}. Relationship: {rel}")
+            continue
+        valid_relationships.append(rel)
+    extracted_data["relationships"] = valid_relationships
+
     return extracted_data
 
 def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5) -> Dict[str, Any]:
