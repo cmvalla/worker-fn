@@ -23,10 +23,10 @@ logging.basicConfig(level=logging.DEBUG)
 # --- Prompt Templates for Langchain ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
-From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph.
+From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph. Please make attention to json keys case.
 
 **Entities:**
-- **ID:** Create a unique, descriptive ID for each entity (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner').
+- **id:** Create a unique, descriptive ID for each entity (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner').
 - **Type:** Assign a specific type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.). Be as granular as possible.
 - **Properties:** Extract a comprehensive set of properties. This MUST include not only obvious attributes like 'name', 'date', or 'version', but also more nuanced details.
   - **'name':** Must retain the original language from the text.
