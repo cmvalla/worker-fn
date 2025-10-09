@@ -12,45 +12,60 @@ from google.cloud import pubsub_v1
 import google.auth
 import functions_framework
 from google.cloud import storage
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from concurrent.futures import ThreadPoolExecutor
 from .config import Config
 from .llm_operations import LLMOperations
 
 logging.basicConfig(level=logging.DEBUG)
 
+def split_text_into_sentences(text: str) -> List[str]:
+    """
+    Splits a given text into sentences using a simple regex.
+    """
+    # This regex attempts to split sentences by periods, question marks, or exclamation marks,
+    # followed by a space or end of string. It tries to avoid splitting on abbreviations.
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return [s.strip() for s in sentences if s.strip()]
+
 
 
 # --- Prompt Templates for Langchain ---
-EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
+SENTENCE_EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """
-From the text below, extract entities and their relationships with extreme detail and verbosity. Your goal is to create a rich and comprehensive knowledge graph. Please make attention to json keys case.
+From the provided sentence, extract entities and their relationships. Use the full chunk context for broader understanding and disambiguation, but only extract information directly present in the sentence. Please pay attention to JSON keys case.
+
+Full Chunk Context:
+---
+{full_chunk_context}
+---
 
 **Entities:**
 - **id:** Create a unique, descriptive ID for each entity (e.g., 'person-john-doe', 'organization-google', 'product-cloud-spanner').
 - **Type:** Assign a specific type (e.g., Person, Organization, Product, Location, Event, Concept, ProgrammingLanguage, Software, OperatingSystem, MathematicalConcept, etc.). Be as granular as possible.
 - **Properties:** Extract a comprehensive set of properties. This MUST include not only obvious attributes like 'name', 'date', or 'version', but also more nuanced details.
   - **'name':** Must retain the original language from the text.
-  - **'description':** Provide a very detailed, verbose description of the entity, summarizing its context and any relevant information from the text. This should be in English.
+  - **'description':** Provide a very detailed, verbose description of the entity, summarizing its context and any relevant information from the sentence. This should be in English.
   - **'value', 'role', 'characteristics', 'purpose', etc.:** All other properties must be translated into English.
-- **Be exhaustive:** Identify and extract every single potential entity mentioned in the text. Do not omit any.
+- **Be exhaustive:** Identify and extract every single potential entity mentioned in the sentence. Do not omit any.
 
 **Relationships:**
 - **Connectivity:** Relationships must connect two entities by their IDs in the 'source' and 'target' fields.
 - **Type:** Assign a descriptive type (e.g., WORKS_FOR, INVESTED_IN, LOCATED_IN, HAS_PROPERTY, IS_A, USES, CREATED_BY, OCCURRED_ON, etc.). The 'type' property must retain the original language from the text.
 - **Properties:**
   - **'confidence':** For every single relationship, you MUST provide a 'confidence' score between 0.0 and 1.0, reflecting your certainty. A higher score means higher certainty.
-  - **'description':** Provide a detailed explanation of why this relationship exists, citing evidence from the text.
+  - **'description':** Provide a detailed explanation of why this relationship exists, citing evidence from the sentence. This should be in English.
   - **Temporal Information:** If a relationship is valid for a specific date or time period, include it as a property (e.g., {{"type": "WORKS_FOR", "properties": {{"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}}}).
-- **Be Verbose:** Create as many relationships as possible to capture all connections between entities. It is better to have a potentially redundant relationship than to miss a connection.
+- **Be Verbose:** Create as many relationships as possible to capture all connections between entities within the sentence.
 
 **Output Format:**
 - Respond ONLY with a single, valid JSON object.
 - The JSON object must have two keys: "entities" and "relationships".
 - Do not include any other text, explanations, or markdown formatting. The output must be a single, raw JSON object.
 """),
-    ("user", """TEXT:
+    ("user", """SENTENCE:
 ---
-{text_chunk}
+{sentence}
 ---
 
 JSON:
@@ -145,22 +160,34 @@ def extract_json_from_response(text: str) -> Dict[str, Any]:
 
     return extracted_data
 
-def invoke_llm_with_retry(text_chunk: str, llm_json: ChatVertexAI, max_retries: int = 5) -> Dict[str, Any]:
-    extraction_chain = EXTRACTION_PROMPT | llm_json
+def invoke_llm_with_retry(sentence: str, full_chunk_context: str, llm_json: ChatVertexAI, max_retries: int = 5) -> Dict[str, Any]:
+    
+    current_prompt_template = SENTENCE_EXTRACTION_PROMPT
     
     for attempt in range(max_retries):
         try:
             logging.info(f"Attempting to call LLM and parse JSON (attempt {attempt + 1}/{max_retries})")
-            llm_response = extraction_chain.invoke({"text_chunk": text_chunk})
+            extraction_chain = current_prompt_template | llm_json
+            llm_response = extraction_chain.invoke({"sentence": sentence, "full_chunk_context": full_chunk_context})
             return extract_json_from_response(llm_response.content)
         except (json.JSONDecodeError, ValueError) as e:
             logging.warning(f"Failed to get valid JSON on attempt {attempt + 1}/{max_retries}: {e}.")
             if attempt < max_retries - 1:
+                # Construct a correction prompt
+                correction_message = f"The previous JSON output was invalid: {e}. Please regenerate the JSON, ensuring it is valid and adheres to the specified schema. Original sentence: {sentence}. Full chunk context: {full_chunk_context}. Invalid output: {llm_response.content if 'llm_response' in locals() else 'N/A'}"
+                
+                # Create a new prompt template for correction
+                correction_prompt_template = ChatPromptTemplate.from_messages([
+                    ("system", correction_message),
+                    ("user", f"SENTENCE:\n---\n{{sentence}}\n---\n\nFull Chunk Context:\n---\n{{full_chunk_context}}\n---\n\nJSON:\n")
+                ])
+                current_prompt_template = correction_prompt_template # Use the correction prompt for the next attempt
+
                 backoff_time = min(1 * (2 ** attempt) + random.uniform(0, 1), 300)
-                logging.info(f"Retrying in {backoff_time:.2f} seconds...")
+                logging.info(f"Retrying with correction in {backoff_time:.2f} seconds...")
                 time.sleep(backoff_time)
             else:
-                logging.error(f"Failed to get valid JSON after {max_retries} attempts.")
+                logging.error(f"Failed to get valid JSON after {max_retries} attempts, even with corrections.")
                 return {"entities": [], "relationships": []}
     return {"entities": [], "relationships": []} # Explicit return to satisfy type checker
 
@@ -328,43 +355,37 @@ def worker(request: Any) -> tuple[str, int]:
         }
 
         # 4. Call the model to extract knowledge from the original text_chunk with deduplication and iterative merging
-        current_extracted_data: Dict[str, Any] = {"entities": [], "relationships": []}
-        previous_entity_count = 0
-
-        for i in range(3): # Max 3 attempts
-            logging.info(f"LLM extraction attempt {i+1}/3")
-            new_extracted_data: Dict[str, Any] = invoke_llm_with_retry(text_chunk, llm_json)
-            logging.debug(f"Raw extracted data from LLM attempt {i+1}: {json.dumps(new_extracted_data)}")
-
-            # Merge new_extracted_data into current_extracted_data
-            # Entities
-            for entity in new_extracted_data.get("entities", []):
-                if entity["id"] not in [e["id"] for e in current_extracted_data["entities"]]:
-                    current_extracted_data["entities"].append(entity)
-            
-            # Relationships
-            for rel in new_extracted_data.get("relationships", []):
-                is_duplicate = False
-                for current_rel in current_extracted_data["relationships"]:
-                    if (current_rel["source"] == rel["source"] and
-                        current_rel["target"] == rel["target"] and
-                        current_rel["type"] == rel["type"]):
-                        is_duplicate = True
-                        break
-                if not is_duplicate:
-                    current_extracted_data["relationships"].append(rel)
-            
-            current_entity_count = len(current_extracted_data["entities"])
-            logging.info(f"After attempt {i+1}, current entities: {current_entity_count}, previous entities: {previous_entity_count}")
-
-            if i > 0 and current_entity_count <= previous_entity_count:
-                logging.info(f"Entity count did not increase. Stopping further LLM calls.")
-                break
-            
-            previous_entity_count = current_entity_count
+        all_extracted_data: Dict[str, Any] = {"entities": [], "relationships": []}
+        sentences: List[str] = split_text_into_sentences(text_chunk)
         
-        extracted_data = current_extracted_data
-        logging.info(f"Final merged data from LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
+        logging.info(f"Splitting text chunk into {len(sentences)} sentences for parallel processing.")
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Prepare arguments for each sentence
+            futures = [executor.submit(invoke_llm_with_retry, sentence, text_chunk, llm_json) for sentence in sentences]
+            
+            for future in futures:
+                sentence_extracted_data = future.result()
+                
+                # Merge entities
+                for entity in sentence_extracted_data.get("entities", []):
+                    if entity["id"] not in [e["id"] for e in all_extracted_data["entities"]]:
+                        all_extracted_data["entities"].append(entity)
+                
+                # Merge relationships
+                for rel in sentence_extracted_data.get("relationships", []):
+                    is_duplicate = False
+                    for existing_rel in all_extracted_data["relationships"]:
+                        if (existing_rel["source"] == rel["source"] and
+                            existing_rel["target"] == rel["target"] and
+                            existing_rel["type"] == rel["type"]):
+                            is_duplicate = True
+                            break
+                    if not is_duplicate:
+                        all_extracted_data["relationships"].append(rel)
+
+        extracted_data = all_extracted_data
+        logging.info(f"Final merged data from all parallel LLM calls. Total entities: {len(extracted_data['entities'])}, Total relationships: {len(extracted_data['relationships'])}")
 
         # 3. Normalize entity IDs
         extracted_data = normalize_entity_ids(extracted_data)
