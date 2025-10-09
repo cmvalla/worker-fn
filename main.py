@@ -23,16 +23,9 @@ from .config import Config
 from .llm_operations import LLMOperations
 
 # --- Basic Setup ---
-# Instantiates a client
+# Setup structured logging for Google Cloud Logging
 client = google.cloud.logging.Client()
-handler = CloudLoggingHandler(client)
-
-# Setup the root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
-if root_logger.hasHandlers():
-    root_logger.handlers.clear()
-root_logger.addHandler(handler)
+client.setup_logging(log_level=logging.DEBUG)
 
 # --- Prompts ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
