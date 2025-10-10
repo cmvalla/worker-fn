@@ -242,21 +242,34 @@ def parallel_extraction_node(state: GraphState) -> Dict[str, Any]:
     return {"sentence_results": results}
 
 def merge_results_node(state: GraphState) -> Dict[str, Any]:
-    """Merges the results from all sentence extractions."""
     logging.info("Node: merge_results_node")
     
     merged_data = {"entities": [], "relationships": []}
-    all_entity_ids = set()
-    
+    entity_map = {} # Map entity_id to the actual entity object
+
     for result in state["sentence_results"]:
         for entity in result.get("entities", []):
             entity_id = entity.get("id")
-            if entity_id and entity_id not in all_entity_ids:
+            if not entity_id:
+                logging.warning(f"Skipping entity due to missing 'id' key during merge: {entity}")
+                continue
+
+            if entity_id in entity_map:
+                # Duplicate ID found, merge properties
+                existing_entity = entity_map[entity_id]
+                existing_entity["properties"].update(entity.get("properties", {}))
+                # Optionally, merge embeddings or other fields if needed
+                # For now, we'll just update properties
+            else:
+                # New entity, add it
+                entity_map[entity_id] = entity
                 merged_data["entities"].append(entity)
-                all_entity_ids.add(entity_id)
         
+        # Relationships are simply extended, assuming they are unique by (source, target, type)
+        # If relationships can have duplicate IDs, a similar merge logic would be needed.
         merged_data["relationships"].extend(result.get("relationships", []))
         
+    state["merged_data"] = merged_data
     logging.info(f"Merged results: {len(merged_data['entities'])} entities, {len(merged_data['relationships'])} relationships.")
     return {"merged_data": merged_data}
 
