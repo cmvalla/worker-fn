@@ -24,8 +24,13 @@ from .llm_operations import LLMOperations
 
 # --- Basic Setup ---
 # Setup structured logging for Google Cloud Logging
-client = google.cloud.logging.Client()
-client.setup_logging(log_level=logging.DEBUG)
+if os.environ.get("LOCAL_DEBUG", "false").lower() == "true":
+    logging.basicConfig(level=logging.DEBUG)
+    logging.info("LOCAL_DEBUG is true. Logging to console.")
+else:
+    client = google.cloud.logging.Client()
+    client.setup_logging(log_level=logging.DEBUG)
+    logging.info("LOCAL_DEBUG is false. Logging to Cloud Logging.")
 
 # --- Prompts ---
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
@@ -183,7 +188,7 @@ def extraction_mapper(sentence_and_state: tuple[str, GraphState]) -> Dict[str, A
     
     prompt_input = {"text_chunk": sentence, "previous_context": ""} # Context handling simplified for parallel runs
     llm_json = state["llm_json"]
-    max_retries = 3
+    max_retries = 5
     
     current_prompt_template = EXTRACTION_PROMPT
     
@@ -318,6 +323,14 @@ def final_processing_node(state: GraphState) -> Dict[str, Any]:
 
     # Generate embeddings
     extracted_data = llm_ops.generate_embeddings(extracted_data)
+
+    if os.environ.get("LOCAL_DEBUG", "false").lower() == "true":
+        logging.info("--- Entities (first 5) ---")
+        for i, entity in enumerate(extracted_data["entities"][:5]):
+            logging.info(f"  {i+1}. ID: {entity.get('id')}, Type: {entity.get('type')}, Properties: {entity.get('properties')}")
+        logging.info("--- Relationships (first 5) ---")
+        for i, rel in enumerate(extracted_data["relationships"][:5]):
+            logging.info(f"  {i+1}. Source: {rel.get('source')}, Target: {rel.get('target')}, Type: {rel.get('type')}, Properties: {rel.get('properties')}")
 
     # Create relationships to Chunk entity
     for entity in extracted_data["entities"]:

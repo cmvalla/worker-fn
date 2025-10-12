@@ -11,6 +11,8 @@ COPY requirements.txt .
 # This layer will be cached and only re-run if requirements.txt changes
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-build the Matplotlib font cache to avoid runtime initialization
+RUN python -c "import matplotlib.pyplot"
 
 # Copy the rest of the application code
 COPY . .
