@@ -7,3 +7,4 @@ langchain
 langgraph
 python-igraph
 pytest
+matplotlib
